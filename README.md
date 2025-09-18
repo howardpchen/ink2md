@@ -4,7 +4,9 @@ Cloud Monitor PDF2MD is a Python project that watches a configured folder in a
 cloud storage service, identifies new PDF files, and converts them into clean
 Markdown using a Large Language Model (LLM) vision endpoint. The first target
 integration focuses on Google Drive, with the goal of supporting additional
-providers in the future.
+providers in the future. The repository now ships with a fully functional
+development pipeline that can monitor either Google Drive (when credentials are
+available) or a local folder for PDFs.
 
 ## Repository Goals
 
@@ -19,39 +21,66 @@ providers in the future.
 
 ## Planned Components
 
-While the initial implementation is under development, the following modules
-are expected to make up the core of the project:
+The core modules that make up the project include:
 
-1. **Configuration** – Define credentials, API keys, folder IDs, polling
-   frequency, and prompt text.
-2. **Cloud Connectors** – Implement Google Drive first, with an abstraction to
-   allow additional providers.
-3. **Processing State Tracker** – Persist the list of PDFs that have already
-   been converted to avoid duplicate work.
-4. **LLM Client** – Handle interactions with the chosen vision-capable model
-   (e.g., Gemini) and encapsulate retry logic.
-5. **Markdown Output Handler** – Save conversion results to the target folder
-   and optionally organize assets such as extracted images.
+1. **Configuration** – Dataclasses and helpers that hydrate the runtime from a
+   JSON configuration file.
+2. **Cloud Connectors** – A pluggable abstraction with concrete
+   implementations for Google Drive and the local filesystem.
+3. **Processing State Tracker** – A JSON-backed tracker that stores processed
+   document IDs and timestamps to avoid duplicate conversions.
+4. **LLM Client** – A pluggable interface with an initial implementation that
+   uses [`pypdf`](https://pypi.org/project/pypdf/) to extract text locally and
+   emit Markdown. This can be swapped with a real LLM integration.
+5. **Markdown Output Handler** – Writes conversion results to the destination
+   folder and prepares a foundation for future asset management.
 
 ## Getting Started
 
-The project will require Python 3.10+ and the typical tooling for virtual
-environments and dependency management. A high-level bootstrap process will be
-documented as the code base evolves, but you can expect steps along the lines
-of:
+The project requires Python 3.10+ and the typical tooling for virtual
+environments and dependency management. A high-level bootstrap process looks
+like the following:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt  # (to be created)
+pip install .[dev]
 ```
 
 You will also need to supply:
 
-- Google Drive credentials with permission to read the monitored folder.
-- API access credentials for the selected LLM service.
+- Google Drive credentials with permission to read the monitored folder (for
+  the Google Drive connector).
 - Configuration values describing folder IDs, polling intervals, and local
-  output paths.
+  output paths. A starter configuration can be found in
+  [`example.config.json`](example.config.json).
+- An optional prompt file that provides guidance to the downstream Markdown
+  generator. A default prompt lives in [`prompts/default_prompt.txt`](prompts/default_prompt.txt).
+
+## Running the Processor
+
+The project exposes a console script and module entrypoint. Assuming a
+configuration file similar to [`example.config.json`](example.config.json), run:
+
+```bash
+cloud-monitor-pdf2md --config example.config.json --once
+```
+
+or with Python directly:
+
+```bash
+python -m cloud_monitor_pdf2md --config example.config.json
+```
+
+Omit `--once` to continuously poll the configured provider using the
+`poll_interval` defined in the configuration. On each iteration the processor
+will:
+
+1. Discover PDFs from the provider.
+2. Skip files that already appear in the processing state file.
+3. Convert new PDFs into Markdown using the configured LLM client.
+4. Write Markdown files to the output directory.
+5. Record the processed document in the state tracker.
 
 ## Status
 
