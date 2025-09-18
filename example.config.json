@@ -1,0 +1,16 @@
+{
+  "provider": "local",
+  "poll_interval": 60,
+  "output": {
+    "directory": "./output"
+  },
+  "state": {
+    "path": "./state/processed.json"
+  },
+  "llm": {
+    "provider": "simple"
+  },
+  "local": {
+    "path": "./sample_pdfs"
+  }
+}

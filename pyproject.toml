@@ -1,0 +1,19 @@
+[project]
+name = "cloud-monitor-pdf2md"
+version = "0.1.0"
+description = "Monitor cloud folders for new PDFs and convert them to Markdown."
+authors = [{ name = "Cloud Monitor PDF2MD" }]
+requires-python = ">=3.10"
+dependencies = [
+    "pypdf>=4.0.0",
+    "google-api-python-client>=2.130.0",
+    "google-auth>=2.30.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+cloud-monitor-pdf2md = "cloud_monitor_pdf2md.cli:main"
