@@ -17,7 +17,8 @@ available) or a local folder for PDFs.
 - **Prompt-Driven Conversion** – Submit a reusable conversion prompt that asks
   the LLM to produce publication-quality Markdown from each PDF.
 - **Result Management** – Store the generated Markdown documents in a local
-  destination that can be synchronized with tools such as Obsidian.
+  destination or commit the results to a Git repository that can be
+  synchronized with tools such as Obsidian.
 
 ## Planned Components
 
@@ -32,8 +33,9 @@ The core modules that make up the project include:
 4. **LLM Client** – A pluggable interface with an initial implementation that
    uses [`pypdf`](https://pypi.org/project/pypdf/) to extract text locally and
    emit Markdown. This can be swapped with a real LLM integration.
-5. **Markdown Output Handler** – Writes conversion results to the destination
-   folder and prepares a foundation for future asset management.
+5. **Markdown Output Handlers** – Write conversion results either to the local
+   filesystem or directly into a Git repository (committing changes and
+   optionally pushing to a remote).
 
 ## Getting Started
 
@@ -49,13 +51,33 @@ pip install .[dev]
 
 You will also need to supply:
 
-- Google Drive credentials with permission to read the monitored folder (for
-  the Google Drive connector).
+- Google Drive OAuth credentials for the end user whose My Drive should be
+  monitored. Provide the downloaded client secrets file via
+  `google_drive.oauth_client_secrets_file` and choose a writable path for
+  `google_drive.oauth_token_file` so the connector can cache the refreshable
+  access token. Optional overrides are available for scopes if additional Drive
+  permissions are required.
 - Configuration values describing folder IDs, polling intervals, and local
   output paths. A starter configuration can be found in
   [`example.config.json`](example.config.json).
+- An optional Git repository destination. Configure `output.provider` as
+  `"git"`, set `output.directory` to the folder within the repository where
+  Markdown should be written, and define the `output.git` block with repository
+  path, branch, and commit settings.
 - An optional prompt file that provides guidance to the downstream Markdown
   generator. A default prompt lives in [`prompts/default_prompt.txt`](prompts/default_prompt.txt).
+
+### Google Drive OAuth setup
+
+To authorize access to an individual's My Drive, create a Google Cloud project,
+enable the Drive API, and generate OAuth client credentials of type "Desktop
+App." Download the resulting JSON secrets file and point
+`google_drive.oauth_client_secrets_file` at its location. On the first run the
+processor will open a local webserver and browser window to complete the OAuth
+consent flow. After you approve the requested scopes (the default is the
+read-only Drive scope), the connector saves the resulting refreshable token to
+`google_drive.oauth_token_file`. Subsequent runs reuse and transparently refresh
+the token so you do not need to reauthorize.
 
 ## Running the Processor
 

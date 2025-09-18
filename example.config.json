@@ -1,6 +1,6 @@
 {
-  "provider": "local",
-  "poll_interval": 60,
+  "provider": "google_drive",
+  "poll_interval": 300,
   "output": {
     "directory": "./output"
   },
@@ -10,7 +10,12 @@
   "llm": {
     "provider": "simple"
   },
-  "local": {
-    "path": "./sample_pdfs"
+  "google_drive": {
+    "folder_id": "YOUR_FOLDER_ID",
+    "oauth_client_secrets_file": "./credentials/client_secret.json",
+    "oauth_token_file": "./credentials/token.json",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.readonly"
+    ]
   }
 }

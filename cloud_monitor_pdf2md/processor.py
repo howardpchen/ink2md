@@ -13,7 +13,7 @@ from .connectors.google_drive import GoogleDriveConnector
 from .connectors.local import LocalFolderConnector
 from .llm.base import LLMClient
 from .llm.simple import SimpleLLMClient
-from .output import MarkdownOutputHandler
+from .output import GitMarkdownOutputHandler, MarkdownOutputHandler
 from .state import ProcessingState
 
 LOGGER = logging.getLogger("cloud_monitor_pdf2md")
@@ -56,16 +56,33 @@ def build_connector(config: AppConfig) -> CloudConnector:
     if config.provider == "google_drive":
         if not config.google_drive:
             raise ValueError("Google Drive configuration missing")
-        if not config.google_drive.service_account_file:
-            raise ValueError("A service_account_file is required for Google Drive usage")
-        from google.oauth2 import service_account
         from googleapiclient.discovery import build
 
-        credentials = service_account.Credentials.from_service_account_file(
-            str(config.google_drive.service_account_file)
-        )
-        if config.google_drive.delegated_user:
-            credentials = credentials.with_subject(config.google_drive.delegated_user)
+        gd_config = config.google_drive
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+
+        credentials = None
+        token_path = gd_config.oauth_token_file
+        if token_path.exists():
+            credentials = Credentials.from_authorized_user_file(
+                str(token_path), list(gd_config.scopes)
+            )
+
+        if not credentials or not credentials.valid:
+            if credentials and credentials.expired and credentials.refresh_token:
+                credentials.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    str(gd_config.oauth_client_secrets_file),
+                    list(gd_config.scopes),
+                )
+                credentials = flow.run_local_server(port=0)
+
+            token_path.parent.mkdir(parents=True, exist_ok=True)
+            token_path.write_text(credentials.to_json(), encoding="utf-8")
+
         service = build("drive", "v3", credentials=credentials)
         return GoogleDriveConnector(
             service=service,
@@ -88,11 +105,26 @@ def build_llm_client(config: AppConfig) -> LLMClient:
     raise ValueError(f"Unsupported LLM provider: {config.llm.provider}")
 
 
+def build_output_handler(config: AppConfig) -> MarkdownOutputHandler:
+    if config.output.provider == "git":
+        if not config.output.git:
+            raise ValueError("Git output requested but git configuration missing")
+        return GitMarkdownOutputHandler(
+            repository_path=config.output.git.repository_path,
+            directory=config.output.directory,
+            branch=config.output.git.branch,
+            remote=config.output.git.remote,
+            commit_message_template=config.output.git.commit_message_template,
+            push=config.output.git.push,
+        )
+    return MarkdownOutputHandler(config.output.directory)
+
+
 def build_processor(config: AppConfig) -> PDFProcessor:
     connector = build_connector(config)
     llm_client = build_llm_client(config)
     state = ProcessingState(config.state.path)
-    output_handler = MarkdownOutputHandler(config.output.directory)
+    output_handler = build_output_handler(config)
     prompt_text = None
     if config.llm.prompt_path and config.llm.prompt_path.exists():
         prompt_text = config.llm.prompt_path.read_text(encoding="utf-8")
@@ -109,5 +141,6 @@ __all__ = [
     "PDFProcessor",
     "build_connector",
     "build_llm_client",
+    "build_output_handler",
     "build_processor",
 ]
