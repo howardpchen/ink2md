@@ -10,7 +10,11 @@ from typing import Any, Dict, Optional, Sequence, Tuple
 
 @dataclass(slots=True)
 class GoogleDriveConfig:
-    """Settings required to poll a Google Drive folder."""
+    """Settings required to poll a Google Drive folder.
+
+    When the token cache path is omitted it defaults to `<client_secrets_stem>_token.json`
+    in the same directory as the supplied client secrets file.
+    """
 
     folder_id: str
     oauth_client_secrets_file: Path
@@ -144,10 +148,12 @@ class AppConfig:
                     "google_drive.oauth_client_secrets_file is required for OAuth-based access"
                 )
 
-            oauth_token_file = cls._coerce_path(gd.get("oauth_token_file"))
-            if oauth_token_file is None:
-                raise ValueError(
-                    "google_drive.oauth_token_file must be provided so refreshable tokens can be cached"
+            token_override = gd.get("oauth_token_file")
+            if token_override is not None:
+                oauth_token_file = cls._coerce_path(token_override)
+            else:
+                oauth_token_file = oauth_client_secrets_file.with_name(
+                    f"{oauth_client_secrets_file.stem}_token.json"
                 )
 
             scopes: Sequence[str] = gd.get(

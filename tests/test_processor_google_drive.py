@@ -12,6 +12,7 @@ import pytest
 from cloud_monitor_pdf2md.config import AppConfig
 from cloud_monitor_pdf2md.connectors.google_drive import GoogleDriveConnector
 from cloud_monitor_pdf2md.processor import build_connector
+from cloud_monitor_pdf2md.processor import build_llm_client
 
 
 def _base_app_config(tmp_path: Path) -> dict:
@@ -274,13 +275,10 @@ def test_build_connector_oauth_runs_flow_when_missing_token(monkeypatch: pytest.
 
     client_secrets = tmp_path / "client.json"
     client_secrets.write_text("{}", encoding="utf-8")
-    token_file = tmp_path / "token.json"
-
     config_dict = _base_app_config(tmp_path)
     config_dict["google_drive"] = {
         "folder_id": "folder-flow",
         "oauth_client_secrets_file": str(client_secrets),
-        "oauth_token_file": str(token_file),
     }
 
     connector = build_connector(AppConfig.from_dict(config_dict))
@@ -290,6 +288,40 @@ def test_build_connector_oauth_runs_flow_when_missing_token(monkeypatch: pytest.
         (str(client_secrets.resolve()), ("https://www.googleapis.com/auth/drive.readonly",)),
     ]
     assert DummyInstalledAppFlow.run_calls == 1
+    token_file = client_secrets.with_name("client_token.json")
     assert token_file.exists()
     assert token_file.read_text(encoding="utf-8") == "{\"token\": \"flow\"}"
+
+
+def test_build_llm_client_gemini(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import cloud_monitor_pdf2md.llm.gemini as gemini_module
+
+    created_kwargs: dict[str, object] = {}
+
+    class DummyGemini:
+        def __init__(self, **kwargs):
+            created_kwargs.update(kwargs)
+
+    monkeypatch.setattr(gemini_module, "GeminiLLMClient", DummyGemini)
+
+    prompt_path = tmp_path / "prompt.md"
+    prompt_path.write_text("Summarize", encoding="utf-8")
+
+    config_data = _base_app_config(tmp_path)
+    config_data["llm"] = {
+        "provider": "gemini",
+        "model": "models/gemini-2.5-flash",
+        "api_key": "secret-key",
+        "prompt_path": str(prompt_path),
+        "temperature": 0.15,
+    }
+
+    config = AppConfig.from_dict(config_data)
+    client = build_llm_client(config)
+
+    assert isinstance(client, DummyGemini)
+    assert created_kwargs["api_key"] == "secret-key"
+    assert created_kwargs["model"] == "models/gemini-2.5-flash"
+    assert created_kwargs["prompt"] == "Summarize"
+    assert created_kwargs["temperature"] == 0.15
 
