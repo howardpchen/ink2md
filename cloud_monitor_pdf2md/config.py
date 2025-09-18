@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 
 @dataclass(slots=True)
@@ -13,9 +13,10 @@ class GoogleDriveConfig:
     """Settings required to poll a Google Drive folder."""
 
     folder_id: str
-    service_account_file: Optional[Path] = None
-    delegated_user: Optional[str] = None
+    oauth_client_secrets_file: Path
+    oauth_token_file: Path
     page_size: int = 100
+    scopes: Tuple[str, ...] = ("https://www.googleapis.com/auth/drive.readonly",)
 
 
 @dataclass(slots=True)
@@ -38,11 +39,24 @@ class LLMConfig:
 
 
 @dataclass(slots=True)
+class GitOutputConfig:
+    """Settings for publishing Markdown changes to a Git repository."""
+
+    repository_path: Path
+    branch: str = "main"
+    remote: str = "origin"
+    commit_message_template: str = "Add {document_name}"
+    push: bool = False
+
+
+@dataclass(slots=True)
 class OutputConfig:
     """Configuration for writing Markdown results."""
 
     directory: Path
     asset_directory: Optional[Path] = None
+    provider: str = "filesystem"
+    git: Optional[GitOutputConfig] = None
 
 
 @dataclass(slots=True)
@@ -75,9 +89,35 @@ class AppConfig:
         provider = data.get("provider", "google_drive")
         poll_interval = float(data.get("poll_interval", 300))
 
-        output_dir = cls._coerce_path(data["output"]["directory"])
-        asset_dir = cls._coerce_path(data["output"].get("asset_directory"))
-        output = OutputConfig(directory=output_dir, asset_directory=asset_dir)
+        output_data = data.get("output", {})
+        output_dir = cls._coerce_path(output_data.get("directory"))
+        if output_dir is None:
+            raise ValueError("output.directory must be provided in the configuration")
+        asset_dir = cls._coerce_path(output_data.get("asset_directory"))
+        output_provider = output_data.get("provider", "filesystem")
+
+        git_cfg = None
+        if "git" in output_data and output_data["git"] is not None:
+            git_data = output_data["git"]
+            repository_path = cls._coerce_path(git_data.get("repository_path"))
+            if repository_path is None:
+                raise ValueError("output.git.repository_path is required when configuring git output")
+            git_cfg = GitOutputConfig(
+                repository_path=repository_path,
+                branch=git_data.get("branch", "main"),
+                remote=git_data.get("remote", "origin"),
+                commit_message_template=git_data.get(
+                    "commit_message_template", "Add {document_name}"
+                ),
+                push=bool(git_data.get("push", False)),
+            )
+
+        output = OutputConfig(
+            directory=output_dir,
+            asset_directory=asset_dir,
+            provider=output_provider,
+            git=git_cfg,
+        )
 
         state_path = cls._coerce_path(data["state"]["path"])
         state = StateConfig(path=state_path)
@@ -95,11 +135,32 @@ class AppConfig:
         google_drive_cfg = None
         if "google_drive" in data:
             gd = data["google_drive"]
+
+            oauth_client_secrets_file = cls._coerce_path(
+                gd.get("oauth_client_secrets_file")
+            )
+            if oauth_client_secrets_file is None:
+                raise ValueError(
+                    "google_drive.oauth_client_secrets_file is required for OAuth-based access"
+                )
+
+            oauth_token_file = cls._coerce_path(gd.get("oauth_token_file"))
+            if oauth_token_file is None:
+                raise ValueError(
+                    "google_drive.oauth_token_file must be provided so refreshable tokens can be cached"
+                )
+
+            scopes: Sequence[str] = gd.get(
+                "scopes", ["https://www.googleapis.com/auth/drive.readonly"]
+            )
+            scopes_tuple = tuple(str(scope) for scope in scopes)
+
             google_drive_cfg = GoogleDriveConfig(
                 folder_id=gd["folder_id"],
-                service_account_file=cls._coerce_path(gd.get("service_account_file")),
-                delegated_user=gd.get("delegated_user"),
+                oauth_client_secrets_file=oauth_client_secrets_file,
+                oauth_token_file=oauth_token_file,
                 page_size=int(gd.get("page_size", 100)),
+                scopes=scopes_tuple,
             )
 
         local_cfg = None
@@ -135,6 +196,7 @@ __all__ = [
     "GoogleDriveConfig",
     "LLMConfig",
     "LocalFolderConfig",
+    "GitOutputConfig",
     "OutputConfig",
     "StateConfig",
     "load_config",
