@@ -111,7 +111,11 @@ def build_connector(config: AppConfig) -> CloudConnector:
                         redirect_uris = flow.client_config.get("redirect_uris") or []
                         if redirect_uris:
                             flow.redirect_uri = redirect_uris[0]
-                    authorization_url, _ = flow.authorization_url(prompt="consent", access_type="offline", include_granted_scopes=True)
+                    authorization_url, _ = flow.authorization_url(
+                        prompt="consent",
+                        access_type="offline",
+                        include_granted_scopes="true",
+                    )
                     LOGGER.info(
                         "Authorize access by visiting:\n%s\n",
                         authorization_url,
