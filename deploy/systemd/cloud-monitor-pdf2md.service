@@ -1,0 +1,23 @@
+[Unit]
+Description=Cloud Monitor PDF2MD
+Documentation=https://github.com/howardpchen/cloud-monitor-pdf2md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${SERVICE_USER}
+Group=${SERVICE_GROUP}
+WorkingDirectory=${INSTALL_PREFIX}
+EnvironmentFile=${ENV_FILE}
+ExecStart=${INSTALL_PREFIX}/.venv/bin/cloud-monitor-pdf2md --config ${CONFIG_PATH}
+Restart=on-failure
+RestartSec=10
+RuntimeDirectory=cloud-monitor
+RuntimeDirectoryMode=0750
+ProtectSystem=full
+ProtectHome=read-only
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

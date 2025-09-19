@@ -1,0 +1,11 @@
+[Unit]
+Description=Run daily purge of Cloud Monitor PDF2MD output
+
+[Timer]
+OnCalendar=daily
+AccuracySec=5m
+Persistent=true
+Unit=${SERVICE_NAME}-purge.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Health probe for Cloud Monitor PDF2MD
+After=${SERVICE_NAME}.service
+
+[Service]
+Type=oneshot
+User=${SERVICE_USER}
+Group=${SERVICE_GROUP}
+WorkingDirectory=${INSTALL_PREFIX}
+EnvironmentFile=${ENV_FILE}
+ExecStart=${INSTALL_PREFIX}/.venv/bin/python ${INSTALL_PREFIX}/scripts/check_processor_health.py \
+  --state-file ${STATE_FILE} \
+  --max-age ${HEALTHCHECK_MAX_AGE} \
+  --journal-unit ${SERVICE_NAME}

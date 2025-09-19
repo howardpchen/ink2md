@@ -161,3 +161,88 @@ welcome.
 
 This project is licensed under the terms of the MIT License. See the
 [`LICENSE`](LICENSE) file for details.
+
+
+## Service Deployment
+
+### Automated Installer (Recommended)
+
+Run the bundled installer from the repository root to provision the service,
+virtual environment, configuration skeleton, and supporting timers:
+
+```bash
+sudo ./scripts/install_service.sh
+```
+
+The script copies the repository to `/opt/cloud-monitor`, creates the
+`cloudmonitor` service account, bootstraps a virtual environment, renders the
+systemd units, and enables the health check + retention timers. Re-run it after
+pulling new changes to deploy upgrades. Override paths or toggle timers with
+flags such as `--prefix`, `--config-dir`, `--skip-healthcheck`, and
+`--skip-purge`.
+
+Inspect `systemctl status cloud-monitor-pdf2md` once the installer finishes and
+update `/etc/cloud-monitor/config.json` and `/etc/cloud-monitor/env` before
+letting the service process real documents.
+
+### Manual Installation
+
+To run the processor autonomously on a Linux host without the installer,
+provision the provided systemd unit and supporting environment file. The unit
+templates include `${...}` placeholders that match the installer defaults—edit
+them to reflect your target paths before copying them into place.
+
+
+### Prepare the Host
+
+1. Create a dedicated service account, for example `sudo useradd --system --home /var/lib/cloud-monitor --shell /usr/sbin/nologin cloudmonitor`.
+2. Check out the repository to `/opt/cloud-monitor` (or another root owned by the service account) and install dependencies into `/opt/cloud-monitor/.venv`.
+3. Create writable directories for runtime state, logs, and temporary files such as `/var/lib/cloud-monitor` and `/var/tmp/cloud-monitor`. Grant ownership to the service user.
+
+### Install the Service
+
+1. Copy `deploy/systemd/cloud-monitor-pdf2md.service` to `/etc/systemd/system/` and adjust the service user, working directory, and virtual environment paths to match your host.
+2. Copy `deploy/systemd/cloud-monitor-pdf2md.env` to `/etc/cloud-monitor/env`,
+   populate the credential paths and API keys, and set permissions so only the
+   service account can read the file (for example `chmod 640` and `chown cloudmonitor:cloudmonitor`).
+3. Place your runtime configuration (for example `config.json`) under
+   `/etc/cloud-monitor/` or another directory that the service account can access.
+4. Reload systemd with `sudo systemctl daemon-reload`, enable the unit with
+   `sudo systemctl enable --now cloud-monitor-pdf2md`, and inspect service status
+   with `systemctl status cloud-monitor-pdf2md`.
+
+### Monitoring
+
+The script `scripts/check_processor_health.py` summarizes the latest processed
+document and optionally tails recent journal errors. Integrate it with your
+monitoring stack or a systemd timer to ensure the pipeline keeps up with new
+documents:
+
+```bash
+./scripts/check_processor_health.py --state-file /var/lib/cloud-monitor/state.json \
+  --max-age 180 --journal-unit cloud-monitor-pdf2md
+```
+
+For automated checks, install the provided timer template:
+
+1. Copy `deploy/systemd/cloud-monitor-pdf2md-healthcheck.service` and `.timer`
+   to `/etc/systemd/system/`.
+2. Adjust the script path, state file, and thresholds in the service unit.
+3. Enable the timer with `sudo systemctl enable --now cloud-monitor-pdf2md-healthcheck.timer`.
+
+### Rolling Purge
+
+Use `scripts/purge_output.py` to prune generated Markdown and attachments while
+retaining the most recent 30 days. Schedule it via cron or a systemd timer
+alongside the service:
+
+```bash
+./scripts/purge_output.py /srv/cloud-monitor/output --days 30 --recursive --remove-empty-dirs
+```
+
+Timer templates in `deploy/systemd/cloud-monitor-pdf2md-purge.service` and
+`.timer` show how to run the purge job daily with a dry-run warning before
+permanent deletion. Copy them into place and enable the timer to keep the output
+volume bounded.
+
+Refer to `deploy/README.md` for annotated installation commands and file descriptions.

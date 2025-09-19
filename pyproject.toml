@@ -19,3 +19,7 @@ dev = [
 
 [project.scripts]
 cloud-monitor-pdf2md = "cloud_monitor_pdf2md.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["cloud_monitor_pdf2md*"]
+exclude = ["tests*", "output*", "state*", "deploy*", "prompts*", "credentials*"]

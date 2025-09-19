@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Cloud Monitor PDF2MD health probe every 10 minutes
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=10m
+AccuracySec=1m
+Unit=${SERVICE_NAME}-healthcheck.service
+
+[Install]
+WantedBy=timers.target
