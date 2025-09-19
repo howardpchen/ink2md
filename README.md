@@ -46,7 +46,8 @@ like the following:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install .[dev]
+pip install -r requirements.txt  # installs runtime + Gemini dependencies
+pip install -e .[dev]            # optional: editable install with pytest
 ```
 
 You will also need to supply:
@@ -66,6 +67,9 @@ You will also need to supply:
   path, branch, and commit settings.
 - An optional prompt file that provides guidance to the downstream Markdown
   generator. A default prompt lives in [`prompts/default_prompt.txt`](prompts/default_prompt.txt).
+- LLM credentials when using a managed provider such as Gemini. Configure the
+  `llm` block as described below and supply the API key via environment
+  variables or a secrets manager—avoid committing secrets to git.
 
 ### Google Drive OAuth setup
 
@@ -78,6 +82,36 @@ consent flow. After you approve the requested scopes (the default is the
 read-only Drive scope), the connector saves the resulting refreshable token to
 `google_drive.oauth_token_file`. Subsequent runs reuse and transparently refresh
 the token so you do not need to reauthorize.
+
+### Choosing an LLM provider
+
+Add an `llm` block to your configuration to choose between built-in text
+extraction and the Gemini integration:
+
+```jsonc
+"llm": {
+  "provider": "gemini",
+  "model": "models/gemini-2.5-flash",
+  "api_key": "${GEMINI_API_KEY}",
+  "prompt_path": "./prompts/default_prompt.txt",
+  "temperature": 0.0
+}
+```
+
+- `provider: "simple"` is the default and uses `pypdf` for basic text
+  extraction.
+- `provider: "gemini"` uploads the original PDF to Gemini 2.5 Flash and returns
+  a consolidated Markdown response that preserves handwriting and images. Set
+  `GEMINI_API_KEY` in your environment before starting the processor.
+- `prompt_path` is optional; when present the file contents are appended to the
+  system instructions sent to the LLM.
+
+### Using the example configuration
+
+Copy [`example.config.json`](example.config.json) to a working file (for
+example, `config.local.json`) and update the placeholders for Drive folder ID,
+client secret locations, and the `llm` block. Remember to keep credentials and
+token files outside version control.
 
 ## Running the Processor
 
@@ -114,4 +148,3 @@ welcome.
 
 This project is licensed under the terms of the MIT License. See the
 [`LICENSE`](LICENSE) file for details.
-
