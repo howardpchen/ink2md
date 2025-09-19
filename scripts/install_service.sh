@@ -208,14 +208,28 @@ sync_repository() {
 }
 
 setup_virtualenv() {
-  if [[ ! -x "$INSTALL_PREFIX/.venv/bin/python" ]]; then
+  local venv_path="$INSTALL_PREFIX/.venv"
+  local venv_python="$venv_path/bin/python"
+
+  if [[ ! -x "$venv_python" ]]; then
     echo "Creating virtualenv"
-    runuser -u "$SERVICE_USER" -- "$PYTHON_BIN" -m venv "$INSTALL_PREFIX/.venv"
+    runuser -u "$SERVICE_USER" -- "$PYTHON_BIN" -m venv "$venv_path"
   fi
+
+  if [[ ! -x "$venv_python" ]]; then
+    echo "Failed to create virtualenv at $venv_path" >&2
+    exit 1
+  fi
+
+  if ! runuser -u "$SERVICE_USER" -- "$venv_python" -m pip --version >/dev/null 2>&1; then
+    echo "Bootstrapping pip inside virtualenv"
+    runuser -u "$SERVICE_USER" -- "$venv_python" -m ensurepip --upgrade
+  fi
+
   echo "Installing Python dependencies"
-  runuser -u "$SERVICE_USER" -- "$INSTALL_PREFIX/.venv/bin/pip" install --upgrade pip wheel setuptools
-  runuser -u "$SERVICE_USER" -- "$INSTALL_PREFIX/.venv/bin/pip" install -r "$INSTALL_PREFIX/requirements.txt"
-  runuser -u "$SERVICE_USER" -- "$INSTALL_PREFIX/.venv/bin/pip" install -e "$INSTALL_PREFIX"
+  runuser -u "$SERVICE_USER" -- "$venv_python" -m pip install --upgrade pip wheel setuptools
+  runuser -u "$SERVICE_USER" -- "$venv_python" -m pip install -r "$INSTALL_PREFIX/requirements.txt"
+  runuser -u "$SERVICE_USER" -- "$venv_python" -m pip install -e "$INSTALL_PREFIX"
 }
 
 update_config_paths() {
