@@ -367,7 +367,7 @@ ensure_ssh_credentials() {
   chown "$SERVICE_USER":"$SERVICE_GROUP" "$PRIVATE_KEY_PATH" "$PUBLIC_KEY_PATH" >/dev/null 2>&1 || true
   chmod 600 "$PRIVATE_KEY_PATH" || true
   chmod 644 "$PUBLIC_KEY_PATH" || true
-  add_post_install_note "Add the deploy key from ${PUBLIC_KEY_PATH} to your Git provider."
+  add_post_install_note "Add the deploy key from ${PUBLIC_KEY_PATH} to your Obsidian Git provider."
 }
 
 seed_known_hosts() {
@@ -396,7 +396,7 @@ PY
 )
   host=${host//$'\r'/}
   if [[ -z "$host" ]]; then
-    add_post_install_note "Populate ${KNOWN_HOSTS_PATH} with the SSH host key for your git remote."
+    add_post_install_note "Populate ${KNOWN_HOSTS_PATH} with the SSH host key for your Obsidian Git remote."
     return
   fi
 

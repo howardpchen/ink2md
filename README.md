@@ -190,9 +190,10 @@ also creates `/etc/pdf2md-monitor/credentials/client_secrets.json` as a
 placeholder—replace it with your real Google Drive OAuth client JSON before
 continuing. The installer generates an SSH deploy key at
 `/etc/pdf2md-monitor/ssh/id_ed25519` and seeds the `known_hosts` file based on
-the configured repository URL; copy the printed public key into your Git host
-before starting the service. The service is already enabled and running; after
-you finish editing those files apply the changes with:
+the configured repository URL; copy the printed public key into the Git host
+that backs your Obsidian vault before starting the service. The service is
+already enabled and running; after you finish editing those files apply the
+changes with:
 
 ```bash
 sudo systemctl daemon-reload
