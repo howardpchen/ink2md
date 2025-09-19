@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import datetime
+import logging
+import os
 import re
+import shlex
 import subprocess
 from pathlib import Path
+from typing import Iterable
 
 from .connectors.base import CloudDocument
+
+LOGGER = logging.getLogger(__name__)
 
 
 class MarkdownOutputHandler:
@@ -16,7 +23,9 @@ class MarkdownOutputHandler:
         self.directory = Path(directory).expanduser().resolve()
         self.directory.mkdir(parents=True, exist_ok=True)
 
-    def write(self, document: CloudDocument, markdown: str) -> Path:
+    def write(
+        self, document: CloudDocument, markdown: str, pdf_bytes: bytes | None = None
+    ) -> Path:
         safe_name = self._sanitize_name(document.name)
         target_path = self.directory / f"{safe_name}.md"
         target_path.write_text(markdown, encoding="utf-8")
@@ -69,8 +78,13 @@ class GitMarkdownOutputHandler(MarkdownOutputHandler):
 
         super().__init__(resolved_directory)
 
-    def write(self, document: CloudDocument, markdown: str) -> Path:
-        output_path = super().write(document, markdown)
+    def write(
+        self,
+        document: CloudDocument,
+        markdown: str,
+        pdf_bytes: bytes | None = None,
+    ) -> Path:
+        output_path = super().write(document, markdown, pdf_bytes=pdf_bytes)
         relative_path = output_path.relative_to(self.repository_path)
         self._run_git("add", str(relative_path))
 
@@ -135,4 +149,332 @@ class GitMarkdownOutputHandler(MarkdownOutputHandler):
         return completed
 
 
-__all__ = ["GitMarkdownOutputHandler", "MarkdownOutputHandler"]
+class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
+    """Synchronise Markdown and media files with an Obsidian Git vault."""
+
+    def __init__(
+        self,
+        *,
+        repository_path: str | Path,
+        repository_url: str,
+        directory: str | Path,
+        media_directory: str | Path,
+        branch: str = "main",
+        remote: str = "origin",
+        commit_message_template: str = (
+            "A new file from you has been added: {markdown_path}"
+        ),
+        media_mode: str = "pdf",
+        private_key_path: str | Path | None = None,
+        known_hosts_path: str | Path | None = None,
+        push: bool = True,
+    ) -> None:
+        self.repository_path = Path(repository_path).expanduser().resolve()
+        self.repository_url = repository_url
+        self.media_mode = media_mode.lower()
+        if self.media_mode not in {"pdf", "jpg"}:
+            raise ValueError("media_mode must be either 'pdf' or 'jpg'")
+
+        self.private_key_path = (
+            Path(private_key_path).expanduser().resolve()
+            if private_key_path is not None
+            else None
+        )
+        if self.private_key_path and not self.private_key_path.exists():
+            raise FileNotFoundError(
+                f"SSH private key not found: {self.private_key_path}"
+            )
+
+        default_known_hosts = Path.home() / ".ssh" / "known_hosts"
+        self.known_hosts_path = (
+            Path(known_hosts_path).expanduser().resolve()
+            if known_hosts_path is not None
+            else default_known_hosts
+        )
+        self._git_env = os.environ.copy()
+        self._configure_git_ssh_command()
+
+        if not (self.repository_path / ".git").exists():
+            self.repository_path.parent.mkdir(parents=True, exist_ok=True)
+            self._ensure_known_host()
+            self._clone_repository(branch)
+        else:
+            # Ensure the known hosts entry exists so pushes do not prompt.
+            self._ensure_known_host()
+
+        super().__init__(
+            repository_path=self.repository_path,
+            directory=directory,
+            branch=branch,
+            remote=remote,
+            commit_message_template=commit_message_template,
+            push=push,
+        )
+
+        self.media_directory = self._resolve_within_repository(media_directory)
+        self.media_directory.mkdir(parents=True, exist_ok=True)
+        self.media_relative_directory = self.media_directory.relative_to(
+            self.repository_path
+        )
+        self.markdown_relative_directory = self.directory.relative_to(
+            self.repository_path
+        )
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+    def write(
+        self,
+        document: CloudDocument,
+        markdown: str,
+        pdf_bytes: bytes | None = None,
+    ) -> Path:
+        if pdf_bytes is None:
+            raise ValueError(
+                "Obsidian output requires the original PDF bytes to manage media files"
+            )
+
+        today_prefix = datetime.date.today().strftime("%Y-%m-%d")
+        safe_name = self._sanitize_name(document.name)
+        base_stem = f"{today_prefix}-{safe_name}"
+
+        markdown_path = self._unique_path(self.directory, base_stem, ".md")
+        final_base = markdown_path.stem
+
+        attachments: list[Path] = []
+        if self.media_mode == "pdf":
+            pdf_path = self._unique_path(self.media_directory, final_base, ".pdf")
+            pdf_path.write_bytes(pdf_bytes)
+            attachments.append(pdf_path)
+            markdown = self._append_pdf_reference(markdown, pdf_path)
+        else:
+            image_paths = self._render_pdf_to_images(pdf_bytes, final_base)
+            attachments.extend(image_paths)
+            markdown = self._append_image_references(markdown, image_paths)
+
+        markdown_path.write_text(markdown, encoding="utf-8")
+
+        staged_paths = [markdown_path, *attachments]
+        for path in staged_paths:
+            relative = path.relative_to(self.repository_path)
+            self._run_git("add", str(relative))
+
+        if not self._has_any_staged_changes():
+            self._reset_paths(staged_paths)
+            return markdown_path
+
+        commit_message = self.commit_message_template.format(
+            document_name=document.name,
+            document_identifier=document.identifier,
+            markdown_path=str(
+                markdown_path.relative_to(self.repository_path).as_posix()
+            ),
+        )
+
+        if self.push:
+            pull = self._run_git(
+                "pull",
+                self.remote,
+                self.branch,
+                "--ff-only",
+                check=False,
+            )
+            if pull.returncode != 0:
+                LOGGER.warning(
+                    "Unable to fast-forward branch %s from %s before committing: %s",
+                    self.branch,
+                    self.remote,
+                    pull.stderr.strip() or pull.stdout.strip(),
+                )
+
+        self._run_git("commit", "-m", commit_message)
+
+        if self.push:
+            self._run_git("push", self.remote, self.branch)
+
+        return markdown_path
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _configure_git_ssh_command(self) -> None:
+        ssh_parts = ["ssh"]
+        if self.private_key_path is not None:
+            ssh_parts.extend(["-i", str(self.private_key_path)])
+        if self.known_hosts_path is not None:
+            self.known_hosts_path.parent.mkdir(parents=True, exist_ok=True)
+            ssh_parts.extend(["-o", f"UserKnownHostsFile={self.known_hosts_path}"])
+        ssh_parts.extend(["-o", "StrictHostKeyChecking=yes"])
+        self._git_env["GIT_SSH_COMMAND"] = " ".join(shlex.quote(part) for part in ssh_parts)
+
+    def _ensure_known_host(self) -> None:
+        host = self._extract_ssh_host(self.repository_url)
+        if not host or self.known_hosts_path is None:
+            return
+
+        probe = subprocess.run(
+            [
+                "ssh-keygen",
+                "-F",
+                host,
+                "-f",
+                str(self.known_hosts_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if probe.returncode == 0 and probe.stdout.strip():
+            return
+
+        scan = subprocess.run(
+            ["ssh-keyscan", "-H", host], capture_output=True, text=True
+        )
+        if scan.returncode == 0 and scan.stdout.strip():
+            with self.known_hosts_path.open("a", encoding="utf-8") as handle:
+                handle.write(scan.stdout)
+        else:
+            LOGGER.warning(
+                "Unable to automatically record the SSH fingerprint for %s. "
+                "Please run `ssh-keyscan -H %s >> %s` manually if authentication prompts appear.",
+                host,
+                host,
+                self.known_hosts_path,
+            )
+
+    @staticmethod
+    def _extract_ssh_host(remote_url: str) -> str | None:
+        if remote_url.startswith("ssh://"):
+            from urllib.parse import urlparse
+
+            parsed = urlparse(remote_url)
+            return parsed.hostname
+        if "@" in remote_url and ":" in remote_url.split("@", 1)[1]:
+            return remote_url.split("@", 1)[1].split(":", 1)[0]
+        return None
+
+    def _clone_repository(self, branch: str) -> None:
+        try:
+            subprocess.run(
+                [
+                    "git",
+                    "clone",
+                    "--branch",
+                    branch,
+                    "--single-branch",
+                    self.repository_url,
+                    str(self.repository_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=self._git_env,
+            )
+        except subprocess.CalledProcessError as exc:  # pragma: no cover - defensive
+            message = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+            raise RuntimeError(f"Failed to clone Obsidian repository: {message}") from exc
+
+    def _resolve_within_repository(self, path_value: str | Path) -> Path:
+        path = Path(path_value)
+        if not path.is_absolute():
+            path = (self.repository_path / path).resolve()
+        else:
+            path = path.expanduser().resolve()
+        try:
+            path.relative_to(self.repository_path)
+        except ValueError as exc:  # pragma: no cover - defensive guard
+            raise ValueError("Paths must reside inside the Obsidian repository") from exc
+        return path
+
+    def _unique_path(self, directory: Path, stem: str, suffix: str) -> Path:
+        counter = 0
+        while True:
+            candidate_stem = stem if counter == 0 else f"{stem}-{counter}"
+            candidate = directory / f"{candidate_stem}{suffix}"
+            if not candidate.exists():
+                return candidate
+            counter += 1
+
+    def _append_pdf_reference(self, markdown: str, pdf_path: Path) -> str:
+        rel_path = self._obsidian_path_for(pdf_path)
+        parts = [markdown.rstrip(), "", f"[Reference PDF]({rel_path})", f"![[{rel_path}]]", ""]
+        return "\n".join(parts)
+
+    def _append_image_references(self, markdown: str, image_paths: list[Path]) -> str:
+        if not image_paths:
+            return markdown
+        rel_paths = [self._obsidian_path_for(path) for path in image_paths]
+        link_line = " ".join(
+            f"[Page {index}]({path})" for index, path in enumerate(rel_paths, start=1)
+        )
+        parts = [markdown.rstrip(), ""]
+        if link_line:
+            parts.append(link_line)
+        parts.extend(f"![[{path}]]" for path in rel_paths)
+        parts.append("")
+        return "\n".join(parts)
+
+    def _obsidian_path_for(self, path: Path) -> str:
+        return path.relative_to(self.repository_path).as_posix()
+
+    def _render_pdf_to_images(self, pdf_bytes: bytes, base_stem: str) -> list[Path]:
+        try:
+            import pypdfium2 as pdfium
+        except ModuleNotFoundError as exc:  # pragma: no cover - handled in runtime
+            raise RuntimeError(
+                "Rendering PDFs to images requires the 'pypdfium2' package"
+            ) from exc
+
+        pdf = pdfium.PdfDocument(pdf_bytes)
+        images: list[Path] = []
+        try:
+            for index, page in enumerate(pdf, start=1):
+                width, _ = page.get_size()
+                scale = 1.0
+                if width:
+                    scale = 800.0 / width
+                bitmap = page.render(scale=scale)
+                try:
+                    image_path = self._unique_path(
+                        self.media_directory, f"{base_stem}-p{index:02d}", ".png"
+                    )
+                    image_path.write_bytes(bitmap.to_png())
+                    images.append(image_path)
+                finally:
+                    bitmap.close()
+                page.close()
+        finally:
+            pdf.close()
+        return images
+
+    def _has_any_staged_changes(self) -> bool:
+        result = self._run_git("diff", "--cached", "--quiet", check=False)
+        if result.returncode not in (0, 1):
+            raise RuntimeError(result.stderr.strip())
+        return result.returncode == 1
+
+    def _reset_paths(self, paths: Iterable[Path]) -> None:
+        relative_paths = [str(path.relative_to(self.repository_path)) for path in paths]
+        if relative_paths:
+            self._run_git("reset", "HEAD", "--", *relative_paths)
+
+    def _run_git(
+        self,
+        *args: str,
+        check: bool = True,
+        capture_output: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        completed = subprocess.run(
+            ["git", "-C", str(self.repository_path), *args],
+            check=check,
+            capture_output=capture_output,
+            text=True,
+            env=self._git_env,
+        )
+        return completed
+
+
+__all__ = [
+    "GitMarkdownOutputHandler",
+    "MarkdownOutputHandler",
+    "ObsidianVaultOutputHandler",
+]

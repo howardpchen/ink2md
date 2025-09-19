@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from .config import AppConfig
@@ -13,7 +14,11 @@ from .connectors.google_drive import GoogleDriveConnector
 from .connectors.local import LocalFolderConnector
 from .llm.base import LLMClient
 from .llm.simple import SimpleLLMClient
-from .output import GitMarkdownOutputHandler, MarkdownOutputHandler
+from .output import (
+    GitMarkdownOutputHandler,
+    MarkdownOutputHandler,
+    ObsidianVaultOutputHandler,
+)
 from .state import ProcessingState
 
 LOGGER = logging.getLogger("cloud_monitor_pdf2md")
@@ -38,7 +43,9 @@ class PDFProcessor:
             LOGGER.info("Processing %s", document.name)
             pdf_bytes = self.connector.download_pdf(document)
             markdown = self.llm_client.convert_pdf(document, pdf_bytes, prompt=self.prompt)
-            output_path = self.output_handler.write(document, markdown)
+            output_path = self.output_handler.write(
+                document, markdown, pdf_bytes=pdf_bytes
+            )
             LOGGER.info("Wrote Markdown to %s", output_path)
             self.state.mark_processed(document.identifier, name=document.name)
             processed += 1
@@ -118,7 +125,6 @@ def build_llm_client(config: AppConfig) -> LLMClient:
             prompt=prompt_content,
             temperature=config.llm.temperature,
         )
-
     raise ValueError(f"Unsupported LLM provider: {config.llm.provider}")
 
 
@@ -133,6 +139,25 @@ def build_output_handler(config: AppConfig) -> MarkdownOutputHandler:
             remote=config.output.git.remote,
             commit_message_template=config.output.git.commit_message_template,
             push=config.output.git.push,
+        )
+    if config.output.provider == "obsidian":
+        if not config.output.obsidian:
+            raise ValueError(
+                "Obsidian output requested but obsidian configuration missing"
+            )
+        asset_directory = config.output.asset_directory or Path("media")
+        return ObsidianVaultOutputHandler(
+            repository_path=config.output.obsidian.repository_path,
+            repository_url=config.output.obsidian.repository_url,
+            directory=config.output.directory,
+            media_directory=asset_directory,
+            branch=config.output.obsidian.branch,
+            remote=config.output.obsidian.remote,
+            commit_message_template=config.output.obsidian.commit_message_template,
+            media_mode=config.output.obsidian.media_mode,
+            private_key_path=config.output.obsidian.private_key_path,
+            known_hosts_path=config.output.obsidian.known_hosts_path,
+            push=config.output.obsidian.push,
         )
     return MarkdownOutputHandler(config.output.directory)
 
