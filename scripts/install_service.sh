@@ -122,12 +122,18 @@ STATE_FILE="${STATE_DATA_DIR}/processed.json"
 CREDENTIALS_DIR="${CONFIG_DIR}/credentials"
 CLIENT_SECRETS_PATH="${CREDENTIALS_DIR}/client_secrets.json"
 GOOGLE_TOKEN_PATH="${STATE_DIR}/google_drive_token.json"
+SSH_DIR="${CONFIG_DIR}/ssh"
+PRIVATE_KEY_PATH="${SSH_DIR}/id_ed25519"
+PUBLIC_KEY_PATH="${PRIVATE_KEY_PATH}.pub"
+KNOWN_HOSTS_PATH="${SSH_DIR}/known_hosts"
 
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || { echo "Missing Python interpreter: $PYTHON_BIN" >&2; exit 1; }
 PYTHON_BIN=$(command -v "$PYTHON_BIN")
 command -v systemctl >/dev/null 2>&1 || { echo "systemctl is required." >&2; exit 1; }
 command -v rsync >/dev/null 2>&1 || { echo "rsync is required." >&2; exit 1; }
 command -v runuser >/dev/null 2>&1 || { echo "runuser is required." >&2; exit 1; }
+command -v ssh-keygen >/dev/null 2>&1 || { echo "ssh-keygen is required." >&2; exit 1; }
+command -v ssh-keyscan >/dev/null 2>&1 || { echo "ssh-keyscan is required." >&2; exit 1; }
 if ! "$PYTHON_BIN" -c "import ensurepip" >/dev/null 2>&1; then
   echo "The interpreter at $PYTHON_BIN is missing the standard ensurepip module." >&2
   echo "Install the python3-venv package (e.g. 'apt install python3-venv') or rerun with --python pointing to an interpreter that bundles ensurepip." >&2
@@ -179,7 +185,7 @@ ensure_user_properties() {
 
 ensure_directories() {
   local path
-  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$OUTPUT_DIR" "$ASSET_DIR" "$CONFIG_DIR" "$CREDENTIALS_DIR" /var/tmp/pdf2md-monitor; do
+  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$OUTPUT_DIR" "$ASSET_DIR" "$CONFIG_DIR" "$CREDENTIALS_DIR" "$SSH_DIR" /var/tmp/pdf2md-monitor; do
     if [[ -e "$path" && ! -d "$path" ]]; then
       echo "Refusing to use existing non-directory path: $path" >&2
       exit 1
@@ -250,12 +256,12 @@ update_config_paths() {
   local token_path="$6"
   local install_prefix="$7"
 
-  "$PYTHON_BIN" - <<'PY' "$config_path" "$state_file" "$output_dir" "$asset_dir" "$client_secrets" "$token_path" "$INSTALL_PREFIX"
+  "$PYTHON_BIN" - <<'PY' "$config_path" "$state_file" "$output_dir" "$asset_dir" "$client_secrets" "$token_path" "$INSTALL_PREFIX" "$PRIVATE_KEY_PATH" "$KNOWN_HOSTS_PATH"
 import json
 import sys
 from pathlib import Path
 
-config_path, state_file, output_dir, asset_dir, client_secrets, token_path, install_prefix = sys.argv[1:]
+config_path, state_file, output_dir, asset_dir, client_secrets, token_path, install_prefix, private_key_path, known_hosts_path = sys.argv[1:]
 config_path = Path(config_path)
 
 if not config_path.exists():
@@ -296,6 +302,17 @@ if prompt_value in default_prompts:
     prompt_path = Path(install_prefix) / "prompts" / "default_prompt.txt"
     llm_section["prompt_path"] = str(prompt_path)
 
+output_section = data.get("output") or {}
+obsidian_section = output_section.get("obsidian")
+if isinstance(obsidian_section, dict):
+    private_value = obsidian_section.get("private_key_path")
+    if private_value in {None, "~/.ssh/id_ed25519", "./id_ed25519"}:
+        obsidian_section["private_key_path"] = str(Path(private_key_path))
+
+    known_value = obsidian_section.get("known_hosts_path")
+    if known_value in {None, "~/.ssh/known_hosts", "./known_hosts"}:
+        obsidian_section["known_hosts_path"] = str(Path(known_hosts_path))
+
 config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 }
@@ -310,7 +327,7 @@ ensure_config_and_env() {
     chmod 640 "$CONFIG_PATH" || true
     add_post_install_note "Review $CONFIG_PATH to confirm environment-specific settings are current."
   fi
-  update_config_paths "$CONFIG_PATH" "$STATE_FILE" "$OUTPUT_DIR" "$ASSET_DIR" "$CLIENT_SECRETS_PATH" "$GOOGLE_TOKEN_PATH" "$INSTALL_PREFIX"
+  update_config_paths "$CONFIG_PATH" "$STATE_FILE" "$OUTPUT_DIR" "$ASSET_DIR" "$CLIENT_SECRETS_PATH" "$GOOGLE_TOKEN_PATH" "$INSTALL_PREFIX" "$PRIVATE_KEY_PATH" "$KNOWN_HOSTS_PATH"
   chgrp "$SERVICE_GROUP" "$CONFIG_PATH" || true
   chmod 640 "$CONFIG_PATH" || true
   if [[ ! -f "$ENV_FILE" ]]; then
@@ -339,6 +356,60 @@ ensure_credentials_placeholder() {
   add_post_install_note "Replace ${CLIENT_SECRETS_PATH} with the actual Google Drive client secrets JSON."
 }
 
+ensure_ssh_credentials() {
+  install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$SSH_DIR"
+  if [[ ! -f "$PRIVATE_KEY_PATH" ]]; then
+    echo "Generating SSH deploy key at $PRIVATE_KEY_PATH"
+    local comment
+    comment="${SERVICE_USER}@$(hostname -f 2>/dev/null || hostname)"
+    ssh-keygen -t ed25519 -N "" -C "$comment" -f "$PRIVATE_KEY_PATH" >/dev/null
+  fi
+  chown "$SERVICE_USER":"$SERVICE_GROUP" "$PRIVATE_KEY_PATH" "$PUBLIC_KEY_PATH" >/dev/null 2>&1 || true
+  chmod 600 "$PRIVATE_KEY_PATH" || true
+  chmod 644 "$PUBLIC_KEY_PATH" || true
+  add_post_install_note "Add the deploy key from ${PUBLIC_KEY_PATH} to your Git provider."
+}
+
+seed_known_hosts() {
+  local host tmp
+  host=$("$PYTHON_BIN" - <<'PY' "$CONFIG_PATH"
+import json
+import sys
+from urllib.parse import urlparse
+
+config_path = sys.argv[1]
+with open(config_path, "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+
+host = ""
+output = data.get("output", {})
+obsidian = output.get("obsidian")
+if isinstance(obsidian, dict):
+    repo_url = obsidian.get("repository_url") or ""
+    if repo_url.startswith("ssh://"):
+        host = urlparse(repo_url).hostname or ""
+    elif "@" in repo_url:
+        host = repo_url.split("@", 1)[1].split(":", 1)[0]
+
+print(host)
+PY
+)
+  host=${host//$'\r'/}
+  if [[ -z "$host" ]]; then
+    add_post_install_note "Populate ${KNOWN_HOSTS_PATH} with the SSH host key for your git remote."
+    return
+  fi
+
+  echo "Seeding SSH known_hosts entry for $host"
+  tmp=$(mktemp)
+  if ssh-keyscan -H "$host" >"$tmp" 2>/dev/null; then
+    install -D -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 644 "$tmp" "$KNOWN_HOSTS_PATH"
+  else
+    add_post_install_note "ssh-keyscan could not reach ${host}; add its host key to ${KNOWN_HOSTS_PATH}."
+  fi
+  rm -f "$tmp"
+}
+
 ensure_state_file() {
   if [[ ! -f "$STATE_FILE" ]]; then
     echo "Creating initial state file at $STATE_FILE"
@@ -362,6 +433,11 @@ print_post_install_notes() {
   for note in "${POST_INSTALL_NOTES[@]}"; do
     echo "  - $note"
   done
+  if [[ -f "$PUBLIC_KEY_PATH" ]]; then
+    echo
+    echo "Deploy key public key (add to your Git host):"
+    cat "$PUBLIC_KEY_PATH"
+  fi
 }
 
 render_template() {
@@ -455,6 +531,8 @@ main() {
   sync_repository
   setup_virtualenv
   ensure_config_and_env
+  ensure_ssh_credentials
+  seed_known_hosts
   ensure_state_file
   install_systemd_units
   reload_and_enable_units

@@ -10,8 +10,8 @@
       "repository_url": "git@github.com:your-org/obsidian-vault.git",
       "branch": "main",
       "remote": "origin",
-      "private_key_path": "~/.ssh/id_ed25519",
-      "known_hosts_path": "~/.ssh/known_hosts",
+      "private_key_path": "/etc/pdf2md-monitor/ssh/id_ed25519",
+      "known_hosts_path": "/etc/pdf2md-monitor/ssh/known_hosts",
       "media_mode": "pdf",
       "push": true
     }
