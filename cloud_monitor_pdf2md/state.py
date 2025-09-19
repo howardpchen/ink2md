@@ -28,8 +28,10 @@ class ProcessingState:
             return json.load(handle)
 
     def _write_state(self, state: Dict[str, Dict[str, str]]) -> None:
-        with self.path.open("w", encoding="utf-8") as handle:
+        tmp_path = self.path.with_suffix(".tmp")
+        with tmp_path.open("w", encoding="utf-8") as handle:
             json.dump(state, handle, indent=2, sort_keys=True)
+        tmp_path.replace(self.path)
 
     def has_processed(self, document_id: str) -> bool:
         with self._lock:
