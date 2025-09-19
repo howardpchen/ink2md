@@ -18,6 +18,8 @@ RESTART_SERVICE=1
 PYTHON_BIN="python3"
 WAS_ACTIVE=0
 POST_INSTALL_NOTES=()
+GIT_USER_NAME=""
+GIT_USER_EMAIL=""
 
 add_post_install_note() {
   local note existing
@@ -49,6 +51,8 @@ Options:
   --skip-purge              Do not install or enable the purge timer
   --no-restart              Install units but do not start/restart the service immediately
   --python PATH             Python interpreter for virtualenv creation (default: python3)
+  --git-name NAME           Git user.name to configure for the service account
+  --git-email EMAIL         Git user.email to configure for the service account
   --help                    Show this help message
 USAGE
 }
@@ -83,6 +87,10 @@ while [[ $# -gt 0 ]]; do
       RESTART_SERVICE=0; shift ;;
     --python)
       PYTHON_BIN="$2"; shift 2 ;;
+    --git-name)
+      GIT_USER_NAME="$2"; shift 2 ;;
+    --git-email)
+      GIT_USER_EMAIL="$2"; shift 2 ;;
     --help)
       usage; exit 0 ;;
     *)
@@ -107,6 +115,16 @@ fi
 
 if [[ -z "$ENV_FILE" ]]; then
   ENV_FILE="${CONFIG_DIR%/}/env"
+fi
+
+if [[ -z "$GIT_USER_NAME" ]]; then
+  read -rp "Git user.name for ${SERVICE_USER} [default: pdf2md-monitor]: " GIT_USER_NAME
+  GIT_USER_NAME=${GIT_USER_NAME:-pdf2md-monitor}
+fi
+
+if [[ -z "$GIT_USER_EMAIL" ]]; then
+  read -rp "Git user.email for ${SERVICE_USER} [default: ops@example.com]: " GIT_USER_EMAIL
+  GIT_USER_EMAIL=${GIT_USER_EMAIL:-ops@example.com}
 fi
 
 STATE_DIR="${STATE_DIR%/}"
@@ -449,6 +467,15 @@ PY
   rm -f "$tmp"
 }
 
+configure_git_identity() {
+  if [[ -z "$GIT_USER_NAME" || -z "$GIT_USER_EMAIL" ]]; then
+    return
+  fi
+
+  runuser -u "$SERVICE_USER" -- git config --global user.name "$GIT_USER_NAME"
+  runuser -u "$SERVICE_USER" -- git config --global user.email "$GIT_USER_EMAIL"
+}
+
 ensure_state_file() {
   local default_content
   default_content='{
@@ -506,6 +533,10 @@ print_post_install_notes() {
     echo "Deploy key public key (add to your Obsidian Git host):"
     cat "$PUBLIC_KEY_PATH"
   fi
+  echo
+  echo "Configured git identity for ${SERVICE_USER}:"
+  runuser -u "$SERVICE_USER" -- git config --global --get user.name || echo "  user.name: (not set)"
+  runuser -u "$SERVICE_USER" -- git config --global --get user.email || echo "  user.email: (not set)"
 }
 
 render_template() {
@@ -601,6 +632,7 @@ main() {
   ensure_config_and_env
   ensure_ssh_credentials
   seed_known_hosts
+  configure_git_identity
   add_post_install_note "Clone or initialize the Obsidian repository at ${CLOUD_VAULT_DIR} and configure git user.name/user.email for ${SERVICE_USER}."
   ensure_state_file
   install_systemd_units
