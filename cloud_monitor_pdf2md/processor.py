@@ -97,15 +97,20 @@ def build_connector(config: AppConfig) -> CloudConnector:
                     "Drive access. If this host is headless, copy the URL into a "
                     "browser on another machine and complete the consent flow: {url}"
                 )
-                if not open_browser:
-                    LOGGER.info(
-                        "No desktop session detected; the OAuth URL will be printed for manual authorization."
+                if open_browser:
+                    credentials = flow.run_local_server(
+                        port=0,
+                        open_browser=True,
+                        authorization_prompt_message=prompt,
                     )
-                credentials = flow.run_local_server(
-                    port=0,
-                    open_browser=open_browser,
-                    authorization_prompt_message=prompt,
-                )
+                else:
+                    LOGGER.info(
+                        "Headless environment detected; using console-based Google Drive OAuth flow."
+                    )
+                    LOGGER.info(
+                        "Follow the printed URL in a browser and paste the verification code back into this terminal."
+                    )
+                    credentials = flow.run_console()
 
             token_path.parent.mkdir(parents=True, exist_ok=True)
             token_path.write_text(credentials.to_json(), encoding="utf-8")

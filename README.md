@@ -207,7 +207,10 @@ sudo -u pdf2md-monitor /opt/pdf2md-monitor/.venv/bin/cloud-monitor-pdf2md \
 ```
 
 Follow the printed OAuth link in a browser, approve the consent screen, and
-wait for the run to finish. The resulting token is saved to
+wait for the run to finish. When running on a headless host the command will
+print the URL and, after you authorize in a separate browser, prompt for the
+verification code—paste it back into the SSH session to complete the flow. The
+resulting token is saved to
 `/var/lib/pdf2md-monitor/google_drive_token.json`; subsequent service runs reuse
 it automatically.
 
