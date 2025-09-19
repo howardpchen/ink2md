@@ -107,10 +107,14 @@ def build_connector(config: AppConfig) -> CloudConnector:
                     LOGGER.info(
                         "Headless environment detected; using console-based Google Drive OAuth flow."
                     )
+                    authorization_url, _ = flow.authorization_url(prompt="consent")
                     LOGGER.info(
-                        "Follow the printed URL in a browser and paste the verification code back into this terminal."
+                        "Authorize access by visiting:\n%s\n",
+                        authorization_url,
                     )
-                    credentials = flow.run_console()
+                    code = input("Enter the verification code provided by Google: ").strip()
+                    flow.fetch_token(code=code)
+                    credentials = flow.credentials
 
             token_path.parent.mkdir(parents=True, exist_ok=True)
             token_path.write_text(credentials.to_json(), encoding="utf-8")
