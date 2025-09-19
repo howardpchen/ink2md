@@ -119,6 +119,8 @@ SERVICE_HOME="$STATE_DIR"
 STATE_DATA_DIR="${STATE_DIR}/state"
 ASSET_DIR="${OUTPUT_DIR}/media"
 STATE_FILE="${STATE_DATA_DIR}/processed.json"
+CREDENTIALS_DIR="${CONFIG_DIR}/credentials"
+CLIENT_SECRETS_PATH="${CREDENTIALS_DIR}/client_secrets.json"
 
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || { echo "Missing Python interpreter: $PYTHON_BIN" >&2; exit 1; }
 PYTHON_BIN=$(command -v "$PYTHON_BIN")
@@ -176,7 +178,7 @@ ensure_user_properties() {
 
 ensure_directories() {
   local path
-  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$OUTPUT_DIR" "$ASSET_DIR" "$CONFIG_DIR" /var/tmp/pdf2md-monitor; do
+  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$OUTPUT_DIR" "$ASSET_DIR" "$CONFIG_DIR" "$CREDENTIALS_DIR" /var/tmp/pdf2md-monitor; do
     if [[ -e "$path" && ! -d "$path" ]]; then
       echo "Refusing to use existing non-directory path: $path" >&2
       exit 1
@@ -188,6 +190,7 @@ ensure_directories() {
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$OUTPUT_DIR"
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$ASSET_DIR"
   install -d -o root -g "$SERVICE_GROUP" -m 750 "$CONFIG_DIR"
+  install -d -o root -g "$SERVICE_GROUP" -m 750 "$CREDENTIALS_DIR"
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 /var/tmp/pdf2md-monitor
 }
 
@@ -299,7 +302,21 @@ ensure_config_and_env() {
     chmod 640 "$ENV_FILE" || true
     add_post_install_note "Verify $ENV_FILE contains current API keys and secret paths."
   fi
+  ensure_credentials_placeholder
   add_post_install_note "Perform the Google Drive OAuth bootstrap once with: sudo -u ${SERVICE_USER} ${INSTALL_PREFIX}/.venv/bin/cloud-monitor-pdf2md --config ${CONFIG_PATH} --once"
+}
+
+ensure_credentials_placeholder() {
+  local message
+  message='{
+  "_comment": "Replace this placeholder with your Google Drive client secrets JSON."
+}
+'
+  if [[ ! -f "$CLIENT_SECRETS_PATH" ]]; then
+    echo "Creating placeholder Google Drive client secrets at $CLIENT_SECRETS_PATH"
+    printf "%s" "$message" | install -D -o root -g "$SERVICE_GROUP" -m 640 /dev/stdin "$CLIENT_SECRETS_PATH"
+  fi
+  add_post_install_note "Replace ${CLIENT_SECRETS_PATH} with the actual Google Drive client secrets JSON."
 }
 
 ensure_state_file() {
