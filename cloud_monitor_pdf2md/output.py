@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import datetime
 import logging
 import os
 import re
 import shlex
+import shutil
 import subprocess
 from datetime import datetime as dt_module, timezone
 from pathlib import Path
@@ -253,8 +253,12 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
         self.repository_path = Path(repository_path).expanduser().resolve()
         self.repository_url = repository_url
         self.media_mode = media_mode.lower()
-        if self.media_mode not in {"pdf", "jpg"}:
-            raise ValueError("media_mode must be either 'pdf' or 'jpg'")
+        if self.media_mode not in {"pdf", "png"}:
+            raise ValueError("media_mode must be either 'pdf' or 'png'")
+
+        self._png_optimizer = (
+            self._select_png_optimizer() if self.media_mode == "png" else None
+        )
 
         self.private_key_path = (
             Path(private_key_path).expanduser().resolve()
@@ -316,9 +320,7 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
                 "Obsidian output requires the original PDF bytes to manage media files"
             )
 
-        today_prefix = datetime.date.today().strftime("%Y-%m-%d")
-        safe_name = self._sanitize_name(document.name)
-        base_stem = f"{today_prefix}-{safe_name}"
+        base_stem = self._build_basename(document)
 
         markdown_path = self._unique_path(self.directory, base_stem, ".md")
         final_base = markdown_path.stem
@@ -519,7 +521,37 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
                     image_path = self._unique_path(
                         self.media_directory, f"{base_stem}-p{index:02d}", ".png"
                     )
-                    image_path.write_bytes(bitmap.to_png())
+                    from PIL import Image  # Imported lazily to keep Pillow optional at runtime
+
+                    pil_image = bitmap.to_pil()
+                    lanczos = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+                    try:
+                        image = pil_image
+                        if image.mode != "L":
+                            converted = image.convert("L")
+                            image.close()
+                            image = converted
+
+                        target_width = 800
+                        width_px, height_px = image.size
+                        if width_px > target_width:
+                            ratio = target_width / width_px
+                            target_height = max(1, int(round(height_px * ratio)))
+                            resized = image.resize(
+                                (target_width, target_height), resample=lanczos
+                            )
+                            image.close()
+                            image = resized
+
+                        image.save(
+                            image_path,
+                            format="PNG",
+                            optimize=True,
+                            compress_level=9,
+                        )
+                    finally:
+                        image.close()
+                    self._optimize_png(image_path)
                     images.append(image_path)
                 finally:
                     bitmap.close()
@@ -527,6 +559,28 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
         finally:
             pdf.close()
         return images
+
+    def _optimize_png(self, image_path: Path) -> None:
+        if self._png_optimizer is None:
+            return
+
+        command, args = self._png_optimizer
+        subprocess.run(
+            [command, *args, str(image_path)],
+            check=False,
+            capture_output=True,
+        )
+
+    def _select_png_optimizer(self) -> tuple[str, list[str]] | None:
+        optimizer = shutil.which("optipng")
+        if optimizer:
+            return optimizer, ["-quiet", "-o7"]
+
+        zopfli = shutil.which("zopfli")
+        if zopfli:
+            return zopfli, ["--png", "--iterations=50"]
+
+        return None
 
     def _has_any_staged_changes(self) -> bool:
         result = self._run_git("diff", "--cached", "--quiet", check=False)

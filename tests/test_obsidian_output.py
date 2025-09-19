@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 import subprocess
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -57,22 +57,27 @@ def test_obsidian_handler_copies_pdf_and_appends_reference(tmp_path: Path) -> No
     )
     _configure_clone_identity(vault_path)
 
-    document = CloudDocument(identifier="doc-1", name="Monthly Report")
+    timestamp = datetime(2024, 9, 18, 10, 30, tzinfo=timezone.utc)
+    document = CloudDocument(
+        identifier="doc-1",
+        name="Monthly Report",
+        modified_at=timestamp,
+    )
     markdown = "# Monthly Report\n\nSummary"
     pdf_bytes = b"%PDF-1.4\n%"
 
     output_path = handler.write(document, markdown, pdf_bytes=pdf_bytes)
 
-    prefix = date.today().strftime("%Y-%m-%d")
+    expected_basename = "Monthly-Report-20240918103000"
     assert output_path.exists()
     assert output_path.parent == vault_path / "notes"
-    assert output_path.stem.startswith(f"{prefix}-Monthly-Report")
+    assert output_path.stem == expected_basename
 
     pdf_files = list((vault_path / "media").glob("*.pdf"))
     assert len(pdf_files) == 1
     pdf_file = pdf_files[0]
     assert pdf_file.read_bytes() == pdf_bytes
-    assert pdf_file.stem.startswith(f"{prefix}-Monthly-Report")
+    assert pdf_file.stem == expected_basename
 
     rendered = output_path.read_text(encoding="utf-8")
     pdf_relative = pdf_file.relative_to(vault_path).as_posix()
@@ -99,7 +104,7 @@ def test_obsidian_handler_copies_pdf_and_appends_reference(tmp_path: Path) -> No
     assert history == "2"
 
 
-def test_obsidian_handler_renders_pngs_for_jpg_mode(tmp_path: Path) -> None:
+def test_obsidian_handler_renders_pngs_for_png_mode(tmp_path: Path) -> None:
     pytest.importorskip(
         "pypdfium2", reason="pypdfium2 is required to render pages into PNG files"
     )
@@ -116,7 +121,7 @@ def test_obsidian_handler_renders_pngs_for_jpg_mode(tmp_path: Path) -> None:
         repository_url=str(remote),
         directory="notes",
         media_directory="assets",
-        media_mode="jpg",
+        media_mode="png",
         push=False,
     )
     _configure_clone_identity(vault_path)
@@ -127,23 +132,29 @@ def test_obsidian_handler_renders_pngs_for_jpg_mode(tmp_path: Path) -> None:
     pdf_writer.write(buffer)
     pdf_bytes = buffer.getvalue()
 
-    document = CloudDocument(identifier="doc-2", name="Project Scope")
+    timestamp = datetime(2024, 9, 18, 10, 30, tzinfo=timezone.utc)
+    document = CloudDocument(
+        identifier="doc-2",
+        name="Project Scope",
+        modified_at=timestamp,
+    )
     markdown = "# Scope\n"
 
     output_path = handler.write(document, markdown, pdf_bytes=pdf_bytes)
 
-    prefix = date.today().strftime("%Y-%m-%d")
+    expected_basename = "Project-Scope-20240918103000"
     assert output_path.exists()
     assert output_path.parent == vault_path / "notes"
-    assert output_path.stem.startswith(f"{prefix}-Project-Scope")
+    assert output_path.stem == expected_basename
 
     image_files = sorted((vault_path / "assets").glob("*.png"))
     assert len(image_files) == 1
     image_file = image_files[0]
-    assert image_file.stem.startswith(f"{prefix}-Project-Scope")
+    assert image_file.stem == f"{expected_basename}-p01"
 
     with Image.open(image_file) as img:
         assert img.width == 800
+        assert img.mode == "L"
 
     rendered = output_path.read_text(encoding="utf-8")
     image_relative = image_file.relative_to(vault_path).as_posix()

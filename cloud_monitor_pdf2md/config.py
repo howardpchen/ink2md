@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional, Sequence, Tuple
@@ -78,7 +79,7 @@ class ObsidianOutputConfig:
     push: bool = True
     private_key_path: Optional[Path] = None
     known_hosts_path: Optional[Path] = None
-    media_mode: Literal["pdf", "jpg"] = "pdf"
+    media_mode: Literal["pdf", "png"] = "pdf"
 
 
 @dataclass(slots=True)
@@ -110,6 +111,14 @@ class AppConfig:
         if allow_relative and not path.is_absolute():
             return path
         return path.resolve()
+
+    @staticmethod
+    def _expand_env(value: Optional[str | Path]) -> Optional[str | Path]:
+        if value is None:
+            return None
+        if isinstance(value, Path):
+            return value
+        return os.path.expandvars(str(value))
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AppConfig":
@@ -167,9 +176,9 @@ class AppConfig:
                 obsidian_data.get("known_hosts_path")
             )
             media_mode = obsidian_data.get("media_mode", "pdf").lower()
-            if media_mode not in {"pdf", "jpg"}:
+            if media_mode not in {"pdf", "png"}:
                 raise ValueError(
-                    "output.obsidian.media_mode must be either 'pdf' or 'jpg'"
+                    "output.obsidian.media_mode must be either 'pdf' or 'png'"
                 )
             obsidian_cfg = ObsidianOutputConfig(
                 repository_path=repository_path,
@@ -205,7 +214,7 @@ class AppConfig:
             provider=llm_data.get("provider", "simple"),
             model=llm_data.get("model"),
             endpoint=llm_data.get("endpoint"),
-            api_key=llm_data.get("api_key"),
+            api_key=cls._expand_env(llm_data.get("api_key")),
             prompt_path=cls._coerce_path(llm_data.get("prompt_path")),
             temperature=float(llm_data.get("temperature", 0.0)),
         )

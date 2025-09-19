@@ -92,3 +92,25 @@ def test_google_drive_config_allows_scope_overrides(tmp_path: Path) -> None:
         "https://www.googleapis.com/auth/drive.metadata.readonly",
         "https://www.googleapis.com/auth/drive.readonly",
     )
+
+
+def test_llm_api_key_expands_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "super-secret")
+
+    config_data = {
+        "provider": "local",
+        "poll_interval": 5,
+        "output": {"directory": str(tmp_path / "output")},
+        "state": {"path": str(tmp_path / "state.json")},
+        "llm": {
+            "provider": "gemini",
+            "api_key": "${GEMINI_API_KEY}",
+            "model": "models/gemini-pro",
+        },
+        "local": {"path": str(tmp_path / "incoming")},
+    }
+
+    app_config = AppConfig.from_dict(config_data)
+
+    assert app_config.llm.api_key == "super-secret"
+    assert app_config.llm.model == "models/gemini-pro"

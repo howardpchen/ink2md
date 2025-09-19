@@ -76,6 +76,13 @@ You will also need to supply:
   - `output.asset_directory` copies the original PDFs alongside the generated
     Markdown using the same timestamp suffix (for example,
     `Report-20240918103000.pdf`).
+  - When targeting an Obsidian vault, set `output.obsidian.media_mode` to `"png"`
+    to render each page as an 800px-wide, 8-bit grayscale PNG with additional
+    lossless optimization, or keep the default `"pdf"` to link back to the
+    source document. Existing configs that previously used `"jpg"` should be
+    updated to `"png"`. Generated Markdown and attachments now use the same
+    `<name>-<timestamp>` naming pattern as filesystem output to simplify
+    cross-target automation.
 
 ### Google Drive OAuth setup
 
