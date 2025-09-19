@@ -299,6 +299,7 @@ ensure_config_and_env() {
     chmod 640 "$ENV_FILE" || true
     add_post_install_note "Verify $ENV_FILE contains current API keys and secret paths."
   fi
+  add_post_install_note "Perform the Google Drive OAuth bootstrap once with: sudo -u ${SERVICE_USER} ${INSTALL_PREFIX}/.venv/bin/cloud-monitor-pdf2md --config ${CONFIG_PATH} --once"
 }
 
 ensure_state_file() {

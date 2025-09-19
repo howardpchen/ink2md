@@ -197,6 +197,18 @@ sudo systemctl restart cloud-monitor-pdf2md.service
 Use `systemctl status cloud-monitor-pdf2md` or `journalctl -u
 cloud-monitor-pdf2md.service` to confirm the deployment is healthy.
 
+Authorize Google Drive access once before leaving the service unattended. Run
+
+```bash
+sudo -u pdf2md-monitor /opt/pdf2md-monitor/.venv/bin/cloud-monitor-pdf2md \
+  --config /etc/pdf2md-monitor/config.json --once
+```
+
+Follow the printed OAuth link in a browser, approve the consent screen, and
+wait for the run to finish. The resulting token is saved to
+`/var/lib/pdf2md-monitor/google_drive_token.json`; subsequent service runs reuse
+it automatically.
+
 ### Manual Installation
 
 To run the processor autonomously on a Linux host without the installer,
