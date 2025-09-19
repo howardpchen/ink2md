@@ -58,6 +58,7 @@ class GeminiLLMClient(LLMClient):
         pdf_bytes: bytes,
         prompt: str | None = None,
     ) -> str:
+        """Upload the PDF to Gemini and return a consolidated Markdown summary."""
         instructions = (prompt or self.prompt or DEFAULT_GEMINI_PROMPT).strip()
         uploaded_file = self._upload_pdf(document, pdf_bytes)
         try:
@@ -79,6 +80,7 @@ class GeminiLLMClient(LLMClient):
         return markdown
         
     def _upload_pdf(self, document: CloudDocument, pdf_bytes: bytes):
+        """Persist the PDF to a temp file and upload it to Gemini's file store."""
         if genai is None:  # pragma: no cover - safety check
             raise RuntimeError("Gemini client is not configured.")
 
@@ -128,6 +130,7 @@ class _UploadedFileHandle:
 
     @property
     def as_part(self) -> dict:
+        """Return the payload fragment required by `generate_content`."""
         return {
             "file_data": {
                 "mime_type": getattr(self._file, "mime_type", "application/pdf"),
@@ -136,6 +139,7 @@ class _UploadedFileHandle:
         }
 
     def cleanup(self) -> None:
+        """Delete the uploaded file from Gemini, ignoring cleanup failures."""
         name = getattr(self._file, "name", None)
         if genai is None or not name:
             return

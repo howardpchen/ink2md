@@ -104,20 +104,24 @@ def build_connector(config: AppConfig) -> CloudConnector:
 
 
 def build_llm_client(config: AppConfig) -> LLMClient:
+    prompt_content = None
+    if config.llm.prompt_path and config.llm.prompt_path.exists():
+        prompt_content = config.llm.prompt_path.read_text(encoding="utf-8")
+
     if config.llm.provider == "simple":
-        prompt_content = None
-        if config.llm.prompt_path and config.llm.prompt_path.exists():
-            prompt_content = config.llm.prompt_path.read_text(encoding="utf-8")
         return SimpleLLMClient(prompt=prompt_content)
+
     if config.llm.provider == "gemini":
+        if not config.llm.api_key:
+            raise ValueError("llm.api_key must be provided for the Gemini provider")
+        if not config.llm.model:
+            raise ValueError("llm.model must be provided for the Gemini provider")
+
         from .llm.gemini import GeminiLLMClient
 
-        prompt_content = None
-        if config.llm.prompt_path and config.llm.prompt_path.exists():
-            prompt_content = config.llm.prompt_path.read_text(encoding="utf-8")
         return GeminiLLMClient(
-            api_key=config.llm.api_key or "",
-            model=config.llm.model or "",
+            api_key=config.llm.api_key,
+            model=config.llm.model,
             prompt=prompt_content,
             temperature=config.llm.temperature,
         )
