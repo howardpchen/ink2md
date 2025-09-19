@@ -3,10 +3,10 @@
   "poll_interval": 300,
   "output": {
     "provider": "obsidian",
-    "directory": "inbox",
-    "asset_directory": "media",
+    "directory": "/opt/pdf2md-monitor/default-vault/inbox",
+    "asset_directory": "/opt/pdf2md-monitor/default-vault/media",
     "obsidian": {
-      "repository_path": "~/vaults/company-notes",
+      "repository_path": "/opt/pdf2md-monitor/default-vault",
       "repository_url": "git@github.com:your-org/obsidian-vault.git",
       "branch": "main",
       "remote": "origin",

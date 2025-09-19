@@ -191,9 +191,24 @@ placeholder—replace it with your real Google Drive OAuth client JSON before
 continuing. The installer generates an SSH deploy key at
 `/etc/pdf2md-monitor/ssh/id_ed25519` and seeds the `known_hosts` file based on
 the configured repository URL; copy the printed public key into the Git host
-that backs your Obsidian vault before starting the service. The service is
-already enabled and running; after you finish editing those files apply the
-changes with:
+that backs your Obsidian vault before starting the service. By default the
+configuration writes Markdown to `/opt/pdf2md-monitor/default-vault/inbox` and
+attachments to `/opt/pdf2md-monitor/default-vault/media`, with the repository
+root at `/opt/pdf2md-monitor/default-vault`. Clone or initialize your Obsidian
+repository in that location and configure a Git identity for the
+`pdf2md-monitor` user, for example:
+
+```bash
+sudo -u pdf2md-monitor git clone git@github.com:your-org/obsidian-vault.git \
+  /opt/pdf2md-monitor/default-vault
+sudo -u pdf2md-monitor git -C /opt/pdf2md-monitor/default-vault config \
+  user.name "PDF2MD Monitor"
+sudo -u pdf2md-monitor git -C /opt/pdf2md-monitor/default-vault config \
+  user.email "ops@example.com"
+```
+
+The service is already enabled and running; after you finish editing those
+files apply the changes with:
 
 ```bash
 sudo systemctl daemon-reload

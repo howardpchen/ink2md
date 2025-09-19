@@ -119,6 +119,9 @@ SERVICE_HOME="$STATE_DIR"
 STATE_DATA_DIR="${STATE_DIR}/state"
 ASSET_DIR="${OUTPUT_DIR}/media"
 STATE_FILE="${STATE_DATA_DIR}/processed.json"
+CLOUD_VAULT_DIR="${INSTALL_PREFIX}/default-vault"
+CLOUD_VAULT_INBOX="${CLOUD_VAULT_DIR}/inbox"
+CLOUD_VAULT_ASSETS="${CLOUD_VAULT_DIR}/media"
 CREDENTIALS_DIR="${CONFIG_DIR}/credentials"
 CLIENT_SECRETS_PATH="${CREDENTIALS_DIR}/client_secrets.json"
 GOOGLE_TOKEN_PATH="${STATE_DIR}/google_drive_token.json"
@@ -185,7 +188,7 @@ ensure_user_properties() {
 
 ensure_directories() {
   local path
-  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$OUTPUT_DIR" "$ASSET_DIR" "$CONFIG_DIR" "$CREDENTIALS_DIR" "$SSH_DIR" /var/tmp/pdf2md-monitor; do
+  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$OUTPUT_DIR" "$ASSET_DIR" "$CONFIG_DIR" "$CREDENTIALS_DIR" "$SSH_DIR" "$CLOUD_VAULT_DIR" "$CLOUD_VAULT_INBOX" "$CLOUD_VAULT_ASSETS" /var/tmp/pdf2md-monitor; do
     if [[ -e "$path" && ! -d "$path" ]]; then
       echo "Refusing to use existing non-directory path: $path" >&2
       exit 1
@@ -198,6 +201,9 @@ ensure_directories() {
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$ASSET_DIR"
   install -d -o root -g "$SERVICE_GROUP" -m 750 "$CONFIG_DIR"
   install -d -o root -g "$SERVICE_GROUP" -m 750 "$CREDENTIALS_DIR"
+  install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$CLOUD_VAULT_DIR"
+  install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$CLOUD_VAULT_INBOX"
+  install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$CLOUD_VAULT_ASSETS"
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 /var/tmp/pdf2md-monitor
 }
 
@@ -256,12 +262,25 @@ update_config_paths() {
   local token_path="$6"
   local install_prefix="$7"
 
-  "$PYTHON_BIN" - <<'PY' "$config_path" "$state_file" "$output_dir" "$asset_dir" "$client_secrets" "$token_path" "$INSTALL_PREFIX" "$PRIVATE_KEY_PATH" "$KNOWN_HOSTS_PATH"
+  "$PYTHON_BIN" - <<'PY' "$config_path" "$state_file" "$output_dir" "$asset_dir" "$client_secrets" "$token_path" "$INSTALL_PREFIX" "$PRIVATE_KEY_PATH" "$KNOWN_HOSTS_PATH" "$CLOUD_VAULT_DIR" "$CLOUD_VAULT_INBOX" "$CLOUD_VAULT_ASSETS"
 import json
 import sys
 from pathlib import Path
 
-config_path, state_file, output_dir, asset_dir, client_secrets, token_path, install_prefix, private_key_path, known_hosts_path = sys.argv[1:]
+(
+    config_path,
+    state_file,
+    output_dir,
+    asset_dir,
+    client_secrets,
+    token_path,
+    install_prefix,
+    private_key_path,
+    known_hosts_path,
+    vault_root,
+    vault_inbox,
+    vault_assets,
+) = sys.argv[1:]
 config_path = Path(config_path)
 
 if not config_path.exists():
@@ -279,12 +298,23 @@ if state_section.get("path") in {None, "./state/processed.json"}:
 
 output_section = data.setdefault("output", {})
 directory_value = output_section.get("directory")
-if directory_value in {None, "inbox", "./output"}:
-    output_section["directory"] = output_dir
+if directory_value in {
+    None,
+    "inbox",
+    "./output",
+    "default-vault/inbox",
+    "~/vaults/company-notes",
+}:
+    output_section["directory"] = vault_inbox
 
 asset_value = output_section.get("asset_directory")
-if asset_value in {None, "media", "./output/media"}:
-    output_section["asset_directory"] = asset_dir
+if asset_value in {
+    None,
+    "media",
+    "./output/media",
+    "default-vault/media",
+}:
+    output_section["asset_directory"] = vault_assets
 
 gd_section = data.setdefault("google_drive", {})
 client_value = gd_section.get("oauth_client_secrets_file")
@@ -305,6 +335,15 @@ if prompt_value in default_prompts:
 output_section = data.get("output") or {}
 obsidian_section = output_section.get("obsidian")
 if isinstance(obsidian_section, dict):
+    repo_path_value = obsidian_section.get("repository_path")
+    if repo_path_value in {
+        None,
+        "~/vaults/company-notes",
+        "./vault",
+        "default-vault",
+    }:
+        obsidian_section["repository_path"] = vault_root
+
     private_value = obsidian_section.get("private_key_path")
     if private_value in {None, "~/.ssh/id_ed25519", "./id_ed25519"}:
         obsidian_section["private_key_path"] = str(Path(private_key_path))
@@ -327,7 +366,7 @@ ensure_config_and_env() {
     chmod 640 "$CONFIG_PATH" || true
     add_post_install_note "Review $CONFIG_PATH to confirm environment-specific settings are current."
   fi
-  update_config_paths "$CONFIG_PATH" "$STATE_FILE" "$OUTPUT_DIR" "$ASSET_DIR" "$CLIENT_SECRETS_PATH" "$GOOGLE_TOKEN_PATH" "$INSTALL_PREFIX" "$PRIVATE_KEY_PATH" "$KNOWN_HOSTS_PATH"
+  update_config_paths "$CONFIG_PATH" "$STATE_FILE" "$OUTPUT_DIR" "$ASSET_DIR" "$CLIENT_SECRETS_PATH" "$GOOGLE_TOKEN_PATH" "$INSTALL_PREFIX" "$PRIVATE_KEY_PATH" "$KNOWN_HOSTS_PATH" "$CLOUD_VAULT_DIR" "$CLOUD_VAULT_INBOX" "$CLOUD_VAULT_ASSETS"
   chgrp "$SERVICE_GROUP" "$CONFIG_PATH" || true
   chmod 640 "$CONFIG_PATH" || true
   if [[ ! -f "$ENV_FILE" ]]; then
@@ -562,6 +601,7 @@ main() {
   ensure_config_and_env
   ensure_ssh_credentials
   seed_known_hosts
+  add_post_install_note "Clone or initialize the Obsidian repository at ${CLOUD_VAULT_DIR} and configure git user.name/user.email for ${SERVICE_USER}."
   ensure_state_file
   install_systemd_units
   reload_and_enable_units
