@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from datetime import datetime, timezone
+
 from cloud_monitor_pdf2md.connectors.base import CloudDocument
 from cloud_monitor_pdf2md.output import GitMarkdownOutputHandler
 
@@ -40,13 +42,22 @@ def test_git_output_handler_commits_changes(tmp_path: Path) -> None:
         branch="main",
         commit_message_template="Add {document_name}",
         push=False,
+        asset_directory="assets",
     )
 
-    document = CloudDocument(identifier="doc-123", name="Project Plan")
-    output_path = handler.write(document, "# Project Plan\n")
+    document = CloudDocument(
+        identifier="doc-123",
+        name="Project Plan",
+        modified_at=datetime(2024, 1, 15, 12, 0, tzinfo=timezone.utc),
+    )
+    output_path = handler.write(document, "# Project Plan\n", pdf_bytes=b"%PDF-1.7")
 
     assert output_path.exists()
-    assert output_path.relative_to(repository) == Path("notes/Project-Plan.md")
+    expected_name = "Project-Plan-20240115120000.md"
+    assert output_path.relative_to(repository) == Path("notes") / expected_name
+
+    pdf_copy = repository / "assets" / "Project-Plan-20240115120000.pdf"
+    assert pdf_copy.exists()
 
     last_commit_message = _git_output("log", "-1", "--pretty=%s", cwd=repository)
     assert last_commit_message == "Add Project Plan"
@@ -55,7 +66,17 @@ def test_git_output_handler_commits_changes(tmp_path: Path) -> None:
     assert rev_count == "1"
 
     # Writing new content should produce another commit.
-    handler.write(CloudDocument(identifier="doc-456", name="Status Update"), "# Update\n")
+    handler.write(
+        CloudDocument(
+            identifier="doc-456",
+            name="Status Update",
+            modified_at=datetime(2024, 1, 16, 9, 30, tzinfo=timezone.utc),
+        ),
+        "# Update\n",
+        pdf_bytes=b"%PDF-1.7",
+    )
+    second_pdf = repository / "assets" / "Status-Update-20240116093000.pdf"
+    assert second_pdf.exists()
     rev_count_after = _git_output("rev-list", "--count", "HEAD", cwd=repository)
     assert rev_count_after == "2"
 
@@ -71,13 +92,20 @@ def test_git_output_handler_skips_empty_commits(tmp_path: Path) -> None:
         branch="main",
         commit_message_template="Add {document_name}",
         push=False,
+        asset_directory="assets",
     )
 
-    document = CloudDocument(identifier="doc-1", name="Notebook")
-    handler.write(document, "# Notes\n")
+    document = CloudDocument(
+        identifier="doc-1",
+        name="Notebook",
+        modified_at=datetime(2024, 5, 1, tzinfo=timezone.utc),
+    )
+    handler.write(document, "# Notes\n", pdf_bytes=b"%PDF-1.7")
+    pdf_copy = repository / "assets" / "Notebook-20240501000000.pdf"
+    assert pdf_copy.exists()
     initial_rev_count = _git_output("rev-list", "--count", "HEAD", cwd=repository)
 
-    handler.write(document, "# Notes\n")
+    handler.write(document, "# Notes\n", pdf_bytes=b"%PDF-1.7")
     rev_count_after = _git_output("rev-list", "--count", "HEAD", cwd=repository)
 
     assert initial_rev_count == rev_count_after

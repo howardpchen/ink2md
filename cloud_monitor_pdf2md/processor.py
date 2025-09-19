@@ -129,6 +129,8 @@ def build_llm_client(config: AppConfig) -> LLMClient:
 
 
 def build_output_handler(config: AppConfig) -> MarkdownOutputHandler:
+    asset_directory = config.output.asset_directory
+
     if config.output.provider == "git":
         if not config.output.git:
             raise ValueError("Git output requested but git configuration missing")
@@ -139,18 +141,20 @@ def build_output_handler(config: AppConfig) -> MarkdownOutputHandler:
             remote=config.output.git.remote,
             commit_message_template=config.output.git.commit_message_template,
             push=config.output.git.push,
+            asset_directory=asset_directory,
         )
+
     if config.output.provider == "obsidian":
         if not config.output.obsidian:
             raise ValueError(
                 "Obsidian output requested but obsidian configuration missing"
             )
-        asset_directory = config.output.asset_directory or Path("media")
+        media_directory = asset_directory or Path("media")
         return ObsidianVaultOutputHandler(
             repository_path=config.output.obsidian.repository_path,
             repository_url=config.output.obsidian.repository_url,
             directory=config.output.directory,
-            media_directory=asset_directory,
+            media_directory=media_directory,
             branch=config.output.obsidian.branch,
             remote=config.output.obsidian.remote,
             commit_message_template=config.output.obsidian.commit_message_template,
@@ -159,7 +163,10 @@ def build_output_handler(config: AppConfig) -> MarkdownOutputHandler:
             known_hosts_path=config.output.obsidian.known_hosts_path,
             push=config.output.obsidian.push,
         )
-    return MarkdownOutputHandler(config.output.directory)
+
+    return MarkdownOutputHandler(
+        config.output.directory, asset_directory=asset_directory
+    )
 
 
 def build_processor(config: AppConfig) -> PDFProcessor:

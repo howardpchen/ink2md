@@ -35,7 +35,9 @@ The core modules that make up the project include:
    emit Markdown. This can be swapped with a real LLM integration.
 5. **Markdown Output Handlers** – Write conversion results either to the local
    filesystem or directly into a Git repository (committing changes and
-   optionally pushing to a remote).
+   optionally pushing to a remote). Markdown filenames are emitted as
+   `<sanitized-title>-<YYYYMMDDHHMMSS>.md`, which keeps chronological ordering
+   predictable in Obsidian vaults and similar tools.
 
 ## Getting Started
 
@@ -70,6 +72,10 @@ You will also need to supply:
 - LLM credentials when using a managed provider such as Gemini. Configure the
   `llm` block as described below and supply the API key via environment
   variables or a secrets manager—avoid committing secrets to git.
+- Optional output settings:
+  - `output.asset_directory` copies the original PDFs alongside the generated
+    Markdown using the same timestamp suffix (for example,
+    `Report-20240918103000.pdf`).
 
 ### Google Drive OAuth setup
 

@@ -8,8 +8,9 @@ import os
 import re
 import shlex
 import subprocess
+from datetime import datetime as dt_module, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 from .connectors.base import CloudDocument
 
@@ -19,22 +20,67 @@ LOGGER = logging.getLogger(__name__)
 class MarkdownOutputHandler:
     """Write Markdown documents to a target directory."""
 
-    def __init__(self, directory: str | Path):
+    def __init__(self, directory: str | Path, asset_directory: str | Path | None = None):
         self.directory = Path(directory).expanduser().resolve()
         self.directory.mkdir(parents=True, exist_ok=True)
 
+        if asset_directory is not None:
+            asset_path = Path(asset_directory).expanduser().resolve()
+            asset_path.mkdir(parents=True, exist_ok=True)
+            self.asset_directory: Optional[Path] = asset_path
+        else:
+            self.asset_directory = None
+
     def write(
-        self, document: CloudDocument, markdown: str, pdf_bytes: bytes | None = None
+        self,
+        document: CloudDocument,
+        markdown: str,
+        *,
+        pdf_bytes: bytes | None = None,
+        basename: str | None = None,
     ) -> Path:
-        safe_name = self._sanitize_name(document.name)
-        target_path = self.directory / f"{safe_name}.md"
-        target_path.write_text(markdown, encoding="utf-8")
-        return target_path
+        if basename is None:
+            basename = self._build_basename(document)
+
+        markdown_path = self.directory / f"{basename}.md"
+        markdown_path.write_text(markdown, encoding="utf-8")
+
+        pdf_copy = self._maybe_copy_pdf(basename, pdf_bytes)
+        self._post_write(document, markdown_path, pdf_copy)
+        return markdown_path
+
+    def _post_write(
+        self,
+        document: CloudDocument,
+        markdown_path: Path,
+        pdf_copy: Optional[Path],
+    ) -> None:  # pragma: no cover - hook for subclasses
+        del document, markdown_path, pdf_copy
 
     @staticmethod
     def _sanitize_name(name: str) -> str:
         safe = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")
         return safe or "document"
+
+    def _build_basename(self, document: CloudDocument) -> str:
+        suffix = self._determine_timestamp_suffix(document)
+        safe_name = self._sanitize_name(document.name)
+        return f"{safe_name}-{suffix}"
+
+    @staticmethod
+    def _determine_timestamp_suffix(document: CloudDocument) -> str:
+        if document.modified_at is not None:
+            timestamp = document.modified_at.astimezone(timezone.utc)
+        else:
+            timestamp = dt_module.now(timezone.utc)
+        return timestamp.strftime("%Y%m%d%H%M%S")
+
+    def _maybe_copy_pdf(self, basename: str, pdf_bytes: bytes | None) -> Optional[Path]:
+        if self.asset_directory is None or pdf_bytes is None:
+            return None
+        pdf_path = self.asset_directory / f"{basename}.pdf"
+        pdf_path.write_bytes(pdf_bytes)
+        return pdf_path
 
 
 class GitMarkdownOutputHandler(MarkdownOutputHandler):
@@ -49,6 +95,7 @@ class GitMarkdownOutputHandler(MarkdownOutputHandler):
         remote: str = "origin",
         commit_message_template: str = "Add {document_name}",
         push: bool = False,
+        asset_directory: str | Path | None = None,
     ) -> None:
         self.repository_path = Path(repository_path).expanduser().resolve()
         if not self.repository_path.exists():
@@ -76,22 +123,57 @@ class GitMarkdownOutputHandler(MarkdownOutputHandler):
                 "The output directory must reside within the Git repository"
             ) from exc
 
-        super().__init__(resolved_directory)
+        asset_path: Optional[Path] = None
+        if asset_directory is not None:
+            candidate = Path(asset_directory)
+            if not candidate.is_absolute():
+                candidate = (self.repository_path / candidate).resolve()
+            else:
+                candidate = candidate.expanduser().resolve()
+            try:
+                candidate.relative_to(self.repository_path)
+            except ValueError as exc:  # pragma: no cover - defensive guard
+                raise ValueError(
+                    "The asset directory must reside within the Git repository"
+                ) from exc
+            asset_path = candidate
+
+        super().__init__(resolved_directory, asset_directory=asset_path)
 
     def write(
         self,
         document: CloudDocument,
         markdown: str,
+        *,
         pdf_bytes: bytes | None = None,
     ) -> Path:
-        output_path = super().write(document, markdown, pdf_bytes=pdf_bytes)
-        relative_path = output_path.relative_to(self.repository_path)
-        self._run_git("add", str(relative_path))
+        basename = self._build_basename(document)
+        markdown_path = super().write(
+            document, markdown, pdf_bytes=pdf_bytes, basename=basename
+        )
+        return markdown_path
 
-        if not self._has_staged_changes(relative_path):
-            # Revert the staged file to keep the index clean when nothing changed.
-            self._run_git("reset", "HEAD", "--", str(relative_path))
-            return output_path
+    def _post_write(
+        self,
+        document: CloudDocument,
+        markdown_path: Path,
+        pdf_copy: Optional[Path],
+    ) -> None:
+        relative_markdown = markdown_path.relative_to(self.repository_path)
+        self._run_git("add", str(relative_markdown))
+
+        relative_pdf: Optional[Path] = None
+        if pdf_copy is not None and pdf_copy.exists():
+            relative_pdf = pdf_copy.relative_to(self.repository_path)
+            self._run_git("add", str(relative_pdf))
+
+        paths = [str(relative_markdown)]
+        if relative_pdf is not None:
+            paths.append(str(relative_pdf))
+
+        if not self._has_any_staged_changes(paths):
+            self._run_git("reset", "HEAD", "--", *paths)
+            return
 
         commit_message = self.commit_message_template.format(
             document_name=document.name,
@@ -100,7 +182,6 @@ class GitMarkdownOutputHandler(MarkdownOutputHandler):
         self._run_git("commit", "-m", commit_message)
         if self.push:
             self._run_git("push", self.remote, self.branch)
-        return output_path
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -121,13 +202,13 @@ class GitMarkdownOutputHandler(MarkdownOutputHandler):
         if checkout.returncode != 0:
             self._run_git("checkout", "-b", self.branch)
 
-    def _has_staged_changes(self, relative_path: Path) -> bool:
+    def _has_any_staged_changes(self, paths: list[str]) -> bool:
         result = self._run_git(
             "diff",
             "--cached",
             "--quiet",
             "--",
-            str(relative_path),
+            *paths,
             check=False,
         )
         if result.returncode not in (0, 1):
@@ -209,6 +290,7 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
             remote=remote,
             commit_message_template=commit_message_template,
             push=push,
+            asset_directory=None,
         )
 
         self.media_directory = self._resolve_within_repository(media_directory)
