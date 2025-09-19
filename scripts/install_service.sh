@@ -121,6 +121,7 @@ ASSET_DIR="${OUTPUT_DIR}/media"
 STATE_FILE="${STATE_DATA_DIR}/processed.json"
 CREDENTIALS_DIR="${CONFIG_DIR}/credentials"
 CLIENT_SECRETS_PATH="${CREDENTIALS_DIR}/client_secrets.json"
+GOOGLE_TOKEN_PATH="${STATE_DIR}/google_drive_token.json"
 
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || { echo "Missing Python interpreter: $PYTHON_BIN" >&2; exit 1; }
 PYTHON_BIN=$(command -v "$PYTHON_BIN")
@@ -245,13 +246,15 @@ update_config_paths() {
   local state_file="$2"
   local output_dir="$3"
   local asset_dir="$4"
+  local client_secrets="$5"
+  local token_path="$6"
 
-  "$PYTHON_BIN" - <<'PY' "$config_path" "$state_file" "$output_dir" "$asset_dir"
+  "$PYTHON_BIN" - <<'PY' "$config_path" "$state_file" "$output_dir" "$asset_dir" "$client_secrets" "$token_path"
 import json
 import sys
 from pathlib import Path
 
-config_path, state_file, output_dir, asset_dir = sys.argv[1:]
+config_path, state_file, output_dir, asset_dir, client_secrets, token_path = sys.argv[1:]
 config_path = Path(config_path)
 
 if not config_path.exists():
@@ -276,6 +279,15 @@ asset_value = output_section.get("asset_directory")
 if asset_value in {None, "media", "./output/media"}:
     output_section["asset_directory"] = asset_dir
 
+gd_section = data.setdefault("google_drive", {})
+client_value = gd_section.get("oauth_client_secrets_file")
+if client_value in {None, "./credentials/client_secret.json", "credentials/client_secret.json"}:
+    gd_section["oauth_client_secrets_file"] = client_secrets
+
+token_value = gd_section.get("oauth_token_file")
+if token_value in {None, "./credentials/client_secret_token.json", "credentials/client_secret_token.json"}:
+    gd_section["oauth_token_file"] = token_path
+
 config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 }
@@ -290,7 +302,7 @@ ensure_config_and_env() {
     chmod 640 "$CONFIG_PATH" || true
     add_post_install_note "Review $CONFIG_PATH to confirm environment-specific settings are current."
   fi
-  update_config_paths "$CONFIG_PATH" "$STATE_FILE" "$OUTPUT_DIR" "$ASSET_DIR"
+  update_config_paths "$CONFIG_PATH" "$STATE_FILE" "$OUTPUT_DIR" "$ASSET_DIR" "$CLIENT_SECRETS_PATH" "$GOOGLE_TOKEN_PATH"
   chgrp "$SERVICE_GROUP" "$CONFIG_PATH" || true
   chmod 640 "$CONFIG_PATH" || true
   if [[ ! -f "$ENV_FILE" ]]; then

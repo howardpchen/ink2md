@@ -185,9 +185,11 @@ flags such as `--prefix`, `--config-dir`, `--skip-healthcheck`, and
 `--skip-purge`.
 
 When the script completes it prints any manual follow-up items (for example,
-editing `/etc/pdf2md-monitor/config.json` and `/etc/pdf2md-monitor/env`). The
-service is already enabled and running; after you finish editing those files
-apply the changes with:
+editing `/etc/pdf2md-monitor/config.json` and `/etc/pdf2md-monitor/env`). It
+also creates `/etc/pdf2md-monitor/credentials/client_secrets.json` as a
+placeholder—replace it with your real Google Drive OAuth client JSON before
+continuing. The service is already enabled and running; after you finish
+editing those files apply the changes with:
 
 ```bash
 sudo systemctl daemon-reload
