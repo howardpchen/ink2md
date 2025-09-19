@@ -174,16 +174,28 @@ virtual environment, configuration skeleton, and supporting timers:
 sudo ./scripts/install_service.sh
 ```
 
-The script copies the repository to `/opt/cloud-monitor`, creates the
-`cloudmonitor` service account, bootstraps a virtual environment, renders the
+Before running the installer ensure the host has the standard Python tooling
+available—for most Debian/Ubuntu systems the following covers everything the
+script expects: `sudo apt install python3 python3-venv python3-pip rsync`. The
+installer copies the repository to `/opt/pdf2md-monitor`, creates the
+`pdf2md-monitor` service account, bootstraps a virtual environment, renders the
 systemd units, and enables the health check + retention timers. Re-run it after
 pulling new changes to deploy upgrades. Override paths or toggle timers with
 flags such as `--prefix`, `--config-dir`, `--skip-healthcheck`, and
 `--skip-purge`.
 
-Inspect `systemctl status cloud-monitor-pdf2md` once the installer finishes and
-update `/etc/cloud-monitor/config.json` and `/etc/cloud-monitor/env` before
-letting the service process real documents.
+When the script completes it prints any manual follow-up items (for example,
+editing `/etc/pdf2md-monitor/config.json` and `/etc/pdf2md-monitor/env`). The
+service is already enabled and running; after you finish editing those files
+apply the changes with:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart cloud-monitor-pdf2md.service
+```
+
+Use `systemctl status cloud-monitor-pdf2md` or `journalctl -u
+cloud-monitor-pdf2md.service` to confirm the deployment is healthy.
 
 ### Manual Installation
 
@@ -195,18 +207,18 @@ them to reflect your target paths before copying them into place.
 
 ### Prepare the Host
 
-1. Create a dedicated service account, for example `sudo useradd --system --home /var/lib/cloud-monitor --shell /usr/sbin/nologin cloudmonitor`.
-2. Check out the repository to `/opt/cloud-monitor` (or another root owned by the service account) and install dependencies into `/opt/cloud-monitor/.venv`.
-3. Create writable directories for runtime state, logs, and temporary files such as `/var/lib/cloud-monitor` and `/var/tmp/cloud-monitor`. Grant ownership to the service user.
+1. Create a dedicated service account, for example `sudo useradd --system --home /var/lib/pdf2md-monitor --shell /usr/sbin/nologin pdf2md-monitor`.
+2. Check out the repository to `/opt/pdf2md-monitor` (or another root owned by the service account) and install dependencies into `/opt/pdf2md-monitor/.venv`.
+3. Create writable directories for runtime state, logs, and temporary files such as `/var/lib/pdf2md-monitor` and `/var/tmp/pdf2md-monitor`. Grant ownership to the service user.
 
 ### Install the Service
 
 1. Copy `deploy/systemd/cloud-monitor-pdf2md.service` to `/etc/systemd/system/` and adjust the service user, working directory, and virtual environment paths to match your host.
-2. Copy `deploy/systemd/cloud-monitor-pdf2md.env` to `/etc/cloud-monitor/env`,
+2. Copy `deploy/systemd/cloud-monitor-pdf2md.env` to `/etc/pdf2md-monitor/env`,
    populate the credential paths and API keys, and set permissions so only the
-   service account can read the file (for example `chmod 640` and `chown cloudmonitor:cloudmonitor`).
+   service account can read the file (for example `chmod 640` and `chown pdf2md-monitor:pdf2md-monitor`).
 3. Place your runtime configuration (for example `config.json`) under
-   `/etc/cloud-monitor/` or another directory that the service account can access.
+   `/etc/pdf2md-monitor/` or another directory that the service account can access.
 4. Reload systemd with `sudo systemctl daemon-reload`, enable the unit with
    `sudo systemctl enable --now cloud-monitor-pdf2md`, and inspect service status
    with `systemctl status cloud-monitor-pdf2md`.
@@ -219,7 +231,7 @@ monitoring stack or a systemd timer to ensure the pipeline keeps up with new
 documents:
 
 ```bash
-./scripts/check_processor_health.py --state-file /var/lib/cloud-monitor/state.json \
+./scripts/check_processor_health.py --state-file /var/lib/pdf2md-monitor/state/processed.json \
   --max-age 180 --journal-unit cloud-monitor-pdf2md
 ```
 
@@ -237,7 +249,7 @@ retaining the most recent 30 days. Schedule it via cron or a systemd timer
 alongside the service:
 
 ```bash
-./scripts/purge_output.py /srv/cloud-monitor/output --days 30 --recursive --remove-empty-dirs
+./scripts/purge_output.py /var/lib/pdf2md-monitor/output --days 30 --recursive --remove-empty-dirs
 ```
 
 Timer templates in `deploy/systemd/cloud-monitor-pdf2md-purge.service` and

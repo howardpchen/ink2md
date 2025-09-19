@@ -125,6 +125,11 @@ PYTHON_BIN=$(command -v "$PYTHON_BIN")
 command -v systemctl >/dev/null 2>&1 || { echo "systemctl is required." >&2; exit 1; }
 command -v rsync >/dev/null 2>&1 || { echo "rsync is required." >&2; exit 1; }
 command -v runuser >/dev/null 2>&1 || { echo "runuser is required." >&2; exit 1; }
+if ! "$PYTHON_BIN" -c "import ensurepip" >/dev/null 2>&1; then
+  echo "The interpreter at $PYTHON_BIN is missing the standard ensurepip module." >&2
+  echo "Install the python3-venv package (e.g. 'apt install python3-venv') or rerun with --python pointing to an interpreter that bundles ensurepip." >&2
+  exit 1
+fi
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
