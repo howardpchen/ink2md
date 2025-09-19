@@ -214,6 +214,11 @@ resulting token is saved to
 `/var/lib/pdf2md-monitor/google_drive_token.json`; subsequent service runs reuse
 it automatically.
 
+The installer also updates `llm.prompt_path` to point at
+`/opt/pdf2md-monitor/prompts/default_prompt.txt`. If you provide a custom
+prompt, store it somewhere readable by `pdf2md-monitor` and adjust the config to
+match.
+
 ### Manual Installation
 
 To run the processor autonomously on a Linux host without the installer,

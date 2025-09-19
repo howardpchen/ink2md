@@ -248,13 +248,14 @@ update_config_paths() {
   local asset_dir="$4"
   local client_secrets="$5"
   local token_path="$6"
+  local install_prefix="$7"
 
-  "$PYTHON_BIN" - <<'PY' "$config_path" "$state_file" "$output_dir" "$asset_dir" "$client_secrets" "$token_path"
+  "$PYTHON_BIN" - <<'PY' "$config_path" "$state_file" "$output_dir" "$asset_dir" "$client_secrets" "$token_path" "$INSTALL_PREFIX"
 import json
 import sys
 from pathlib import Path
 
-config_path, state_file, output_dir, asset_dir, client_secrets, token_path = sys.argv[1:]
+config_path, state_file, output_dir, asset_dir, client_secrets, token_path, install_prefix = sys.argv[1:]
 config_path = Path(config_path)
 
 if not config_path.exists():
@@ -288,6 +289,13 @@ token_value = gd_section.get("oauth_token_file")
 if token_value in {None, "./credentials/client_secret_token.json", "credentials/client_secret_token.json"}:
     gd_section["oauth_token_file"] = token_path
 
+llm_section = data.setdefault("llm", {})
+prompt_value = llm_section.get("prompt_path")
+default_prompts = {None, "./prompts/default_prompt.txt", "prompts/default_prompt.txt"}
+if prompt_value in default_prompts:
+    prompt_path = Path(install_prefix) / "prompts" / "default_prompt.txt"
+    llm_section["prompt_path"] = str(prompt_path)
+
 config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 }
@@ -302,7 +310,7 @@ ensure_config_and_env() {
     chmod 640 "$CONFIG_PATH" || true
     add_post_install_note "Review $CONFIG_PATH to confirm environment-specific settings are current."
   fi
-  update_config_paths "$CONFIG_PATH" "$STATE_FILE" "$OUTPUT_DIR" "$ASSET_DIR" "$CLIENT_SECRETS_PATH" "$GOOGLE_TOKEN_PATH"
+  update_config_paths "$CONFIG_PATH" "$STATE_FILE" "$OUTPUT_DIR" "$ASSET_DIR" "$CLIENT_SECRETS_PATH" "$GOOGLE_TOKEN_PATH" "$INSTALL_PREFIX"
   chgrp "$SERVICE_GROUP" "$CONFIG_PATH" || true
   chmod 640 "$CONFIG_PATH" || true
   if [[ ! -f "$ENV_FILE" ]]; then
