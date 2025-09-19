@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -85,7 +86,26 @@ def build_connector(config: AppConfig) -> CloudConnector:
                     str(gd_config.oauth_client_secrets_file),
                     list(gd_config.scopes),
                 )
-                credentials = flow.run_local_server(port=0)
+
+                open_browser = bool(
+                    os.environ.get("DISPLAY")
+                    or os.environ.get("WAYLAND_DISPLAY")
+                    or os.environ.get("BROWSER")
+                )
+                prompt = (
+                    "Please open the following URL in a browser to authorize Google "
+                    "Drive access. If this host is headless, copy the URL into a "
+                    "browser on another machine and complete the consent flow: {url}"
+                )
+                if not open_browser:
+                    LOGGER.info(
+                        "No desktop session detected; the OAuth URL will be printed for manual authorization."
+                    )
+                credentials = flow.run_local_server(
+                    port=0,
+                    open_browser=open_browser,
+                    authorization_prompt_message=prompt,
+                )
 
             token_path.parent.mkdir(parents=True, exist_ok=True)
             token_path.write_text(credentials.to_json(), encoding="utf-8")
