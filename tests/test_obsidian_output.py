@@ -1,0 +1,160 @@
+"""Tests for the Obsidian Git output handler."""
+
+from __future__ import annotations
+
+import io
+import subprocess
+from datetime import date
+from pathlib import Path
+
+import pytest
+from pypdf import PdfWriter
+
+from cloud_monitor_pdf2md.connectors.base import CloudDocument
+from cloud_monitor_pdf2md.output import ObsidianVaultOutputHandler
+
+
+def _init_git_repository(path: Path) -> None:
+    result = subprocess.run(
+        ["git", "init", "--initial-branch", "main"],
+        cwd=path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        subprocess.run(["git", "init"], cwd=path, check=True)
+        subprocess.run(["git", "checkout", "-b", "main"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.email", "tests@example.com"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Tests"], cwd=path, check=True)
+
+
+def _seed_commit(path: Path, filename: str) -> None:
+    target = path / filename
+    target.write_text("seed", encoding="utf-8")
+    subprocess.run(["git", "add", filename], cwd=path, check=True)
+    subprocess.run(["git", "commit", "-m", "seed"], cwd=path, check=True)
+
+
+def _configure_clone_identity(path: Path) -> None:
+    subprocess.run(["git", "config", "user.email", "vault@example.com"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Vault"], cwd=path, check=True)
+
+
+def test_obsidian_handler_copies_pdf_and_appends_reference(tmp_path: Path) -> None:
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _init_git_repository(remote)
+    _seed_commit(remote, "README.md")
+
+    vault_path = tmp_path / "vault"
+    handler = ObsidianVaultOutputHandler(
+        repository_path=vault_path,
+        repository_url=str(remote),
+        directory="notes",
+        media_directory="media",
+        push=False,
+    )
+    _configure_clone_identity(vault_path)
+
+    document = CloudDocument(identifier="doc-1", name="Monthly Report")
+    markdown = "# Monthly Report\n\nSummary"
+    pdf_bytes = b"%PDF-1.4\n%"
+
+    output_path = handler.write(document, markdown, pdf_bytes=pdf_bytes)
+
+    prefix = date.today().strftime("%Y-%m-%d")
+    assert output_path.exists()
+    assert output_path.parent == vault_path / "notes"
+    assert output_path.stem.startswith(f"{prefix}-Monthly-Report")
+
+    pdf_files = list((vault_path / "media").glob("*.pdf"))
+    assert len(pdf_files) == 1
+    pdf_file = pdf_files[0]
+    assert pdf_file.read_bytes() == pdf_bytes
+    assert pdf_file.stem.startswith(f"{prefix}-Monthly-Report")
+
+    rendered = output_path.read_text(encoding="utf-8")
+    pdf_relative = pdf_file.relative_to(vault_path).as_posix()
+    assert f"[Reference PDF]({pdf_relative})" in rendered
+    assert f"![[{pdf_relative}]]" in rendered
+
+    log_output = subprocess.run(
+        ["git", "log", "-1", "--pretty=%s"],
+        cwd=vault_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    expected_markdown = output_path.relative_to(vault_path).as_posix()
+    assert log_output == f"A new file from you has been added: {expected_markdown}"
+
+    history = subprocess.run(
+        ["git", "rev-list", "--count", "HEAD"],
+        cwd=vault_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert history == "2"
+
+
+def test_obsidian_handler_renders_pngs_for_jpg_mode(tmp_path: Path) -> None:
+    pytest.importorskip(
+        "pypdfium2", reason="pypdfium2 is required to render pages into PNG files"
+    )
+    Image = pytest.importorskip("PIL.Image", reason="Pillow is required to inspect PNGs")
+
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _init_git_repository(remote)
+    _seed_commit(remote, "README.md")
+
+    vault_path = tmp_path / "vault"
+    handler = ObsidianVaultOutputHandler(
+        repository_path=vault_path,
+        repository_url=str(remote),
+        directory="notes",
+        media_directory="assets",
+        media_mode="jpg",
+        push=False,
+    )
+    _configure_clone_identity(vault_path)
+
+    pdf_writer = PdfWriter()
+    pdf_writer.add_blank_page(width=612, height=792)
+    buffer = io.BytesIO()
+    pdf_writer.write(buffer)
+    pdf_bytes = buffer.getvalue()
+
+    document = CloudDocument(identifier="doc-2", name="Project Scope")
+    markdown = "# Scope\n"
+
+    output_path = handler.write(document, markdown, pdf_bytes=pdf_bytes)
+
+    prefix = date.today().strftime("%Y-%m-%d")
+    assert output_path.exists()
+    assert output_path.parent == vault_path / "notes"
+    assert output_path.stem.startswith(f"{prefix}-Project-Scope")
+
+    image_files = sorted((vault_path / "assets").glob("*.png"))
+    assert len(image_files) == 1
+    image_file = image_files[0]
+    assert image_file.stem.startswith(f"{prefix}-Project-Scope")
+
+    with Image.open(image_file) as img:
+        assert img.width == 800
+
+    rendered = output_path.read_text(encoding="utf-8")
+    image_relative = image_file.relative_to(vault_path).as_posix()
+    assert image_relative in rendered
+    assert f"![[{image_relative}]]" in rendered
+
+    history = subprocess.run(
+        ["git", "rev-list", "--count", "HEAD"],
+        cwd=vault_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert history == "2"

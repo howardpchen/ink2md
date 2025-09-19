@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any, Dict, Literal, Optional, Sequence, Tuple
 
 
 @dataclass(slots=True)
@@ -61,6 +61,24 @@ class OutputConfig:
     asset_directory: Optional[Path] = None
     provider: str = "filesystem"
     git: Optional[GitOutputConfig] = None
+    obsidian: Optional["ObsidianOutputConfig"] = None
+
+
+@dataclass(slots=True)
+class ObsidianOutputConfig:
+    """Settings specific to synchronising with an Obsidian Git repository."""
+
+    repository_path: Path
+    repository_url: str
+    branch: str = "main"
+    remote: str = "origin"
+    commit_message_template: str = (
+        "A new file from you has been added: {markdown_path}"
+    )
+    push: bool = True
+    private_key_path: Optional[Path] = None
+    known_hosts_path: Optional[Path] = None
+    media_mode: Literal["pdf", "jpg"] = "pdf"
 
 
 @dataclass(slots=True)
@@ -83,10 +101,15 @@ class AppConfig:
     local: Optional[LocalFolderConfig] = None
 
     @staticmethod
-    def _coerce_path(value: Optional[str | Path]) -> Optional[Path]:
+    def _coerce_path(
+        value: Optional[str | Path], *, allow_relative: bool = False
+    ) -> Optional[Path]:
         if value is None:
             return None
-        return Path(value).expanduser().resolve()
+        path = Path(value).expanduser()
+        if allow_relative and not path.is_absolute():
+            return path
+        return path.resolve()
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AppConfig":
@@ -94,11 +117,17 @@ class AppConfig:
         poll_interval = float(data.get("poll_interval", 300))
 
         output_data = data.get("output", {})
-        output_dir = cls._coerce_path(output_data.get("directory"))
+        output_provider = output_data.get("provider", "filesystem")
+        allow_relative = output_provider in {"git", "obsidian"}
+        output_dir = cls._coerce_path(
+            output_data.get("directory"), allow_relative=allow_relative
+        )
         if output_dir is None:
             raise ValueError("output.directory must be provided in the configuration")
-        asset_dir = cls._coerce_path(output_data.get("asset_directory"))
-        output_provider = output_data.get("provider", "filesystem")
+        asset_value = output_data.get("asset_directory")
+        asset_dir = cls._coerce_path(
+            asset_value, allow_relative=allow_relative
+        )
 
         git_cfg = None
         if "git" in output_data and output_data["git"] is not None:
@@ -116,11 +145,56 @@ class AppConfig:
                 push=bool(git_data.get("push", False)),
             )
 
+        obsidian_cfg = None
+        if output_provider == "obsidian":
+            obsidian_data = output_data.get("obsidian", {})
+            repository_path = cls._coerce_path(
+                obsidian_data.get("repository_path")
+            )
+            if repository_path is None:
+                raise ValueError(
+                    "output.obsidian.repository_path is required when configuring Obsidian output"
+                )
+            repository_url = obsidian_data.get("repository_url")
+            if not repository_url:
+                raise ValueError(
+                    "output.obsidian.repository_url is required when configuring Obsidian output"
+                )
+            private_key_path = cls._coerce_path(
+                obsidian_data.get("private_key_path")
+            )
+            known_hosts_path = cls._coerce_path(
+                obsidian_data.get("known_hosts_path")
+            )
+            media_mode = obsidian_data.get("media_mode", "pdf").lower()
+            if media_mode not in {"pdf", "jpg"}:
+                raise ValueError(
+                    "output.obsidian.media_mode must be either 'pdf' or 'jpg'"
+                )
+            obsidian_cfg = ObsidianOutputConfig(
+                repository_path=repository_path,
+                repository_url=str(repository_url),
+                branch=obsidian_data.get("branch", "main"),
+                remote=obsidian_data.get("remote", "origin"),
+                commit_message_template=obsidian_data.get(
+                    "commit_message_template",
+                    "A new file from you has been added: {markdown_path}",
+                ),
+                push=bool(obsidian_data.get("push", True)),
+                private_key_path=private_key_path,
+                known_hosts_path=known_hosts_path,
+                media_mode=media_mode,  # type: ignore[arg-type]
+            )
+
+        if asset_dir is None and output_provider == "obsidian":
+            asset_dir = Path("media")
+
         output = OutputConfig(
             directory=output_dir,
             asset_directory=asset_dir,
             provider=output_provider,
             git=git_cfg,
+            obsidian=obsidian_cfg,
         )
 
         state_path = cls._coerce_path(data["state"]["path"])
@@ -203,6 +277,7 @@ __all__ = [
     "LLMConfig",
     "LocalFolderConfig",
     "GitOutputConfig",
+    "ObsidianOutputConfig",
     "OutputConfig",
     "StateConfig",
     "load_config",

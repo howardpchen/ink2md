@@ -2,7 +2,19 @@
   "provider": "google_drive",
   "poll_interval": 300,
   "output": {
-    "directory": "./output"
+    "provider": "obsidian",
+    "directory": "inbox",
+    "asset_directory": "media",
+    "obsidian": {
+      "repository_path": "~/vaults/company-notes",
+      "repository_url": "git@github.com:your-org/obsidian-vault.git",
+      "branch": "main",
+      "remote": "origin",
+      "private_key_path": "~/.ssh/id_ed25519",
+      "known_hosts_path": "~/.ssh/known_hosts",
+      "media_mode": "pdf",
+      "push": true
+    }
   },
   "state": {
     "path": "./state/processed.json"

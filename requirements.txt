@@ -1,5 +1,6 @@
 # Core runtime dependencies
 pypdf>=4.0.0
+pypdfium2>=4.20.0
 google-api-python-client>=2.130.0
 google-auth>=2.30.0
 google-auth-oauthlib>=1.2.0
