@@ -411,14 +411,43 @@ PY
 }
 
 ensure_state_file() {
-  if [[ ! -f "$STATE_FILE" ]]; then
-    echo "Creating initial state file at $STATE_FILE"
-    cat > "$STATE_FILE" <<'STATE'
-{
+  local default_content
+  default_content='{
   "processed": {}
 }
-STATE
+'
+
+  if [[ ! -f "$STATE_FILE" ]]; then
+    echo "Creating initial state file at $STATE_FILE"
+    printf "%s" "$default_content" >"$STATE_FILE"
+  else
+    if ! "$PYTHON_BIN" - <<'PY' "$STATE_FILE"
+import json
+import sys
+from pathlib import Path
+
+state_path = Path(sys.argv[1])
+
+try:
+    data = json.loads(state_path.read_text(encoding="utf-8"))
+except json.JSONDecodeError:
+    sys.exit(1)
+
+if not isinstance(data, dict):
+    sys.exit(1)
+
+processed = data.get("processed")
+if not isinstance(processed, dict):
+    sys.exit(1)
+
+sys.exit(0)
+PY
+    then
+      echo "Resetting invalid state file at $STATE_FILE"
+      printf "%s" "$default_content" >"$STATE_FILE"
+    fi
   fi
+
   chown "$SERVICE_USER":"$SERVICE_GROUP" "$STATE_FILE" || true
   chmod 640 "$STATE_FILE" || true
 }
@@ -435,7 +464,7 @@ print_post_install_notes() {
   done
   if [[ -f "$PUBLIC_KEY_PATH" ]]; then
     echo
-    echo "Deploy key public key (add to your Git host):"
+    echo "Deploy key public key (add to your Obsidian Git host):"
     cat "$PUBLIC_KEY_PATH"
   fi
 }
