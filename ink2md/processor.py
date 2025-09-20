@@ -127,6 +127,17 @@ def build_connector(
     force_console_oauth: bool = False,
     force_token_refresh: bool = False,
 ) -> CloudConnector:
+    """Return the configured connector with optional OAuth overrides.
+
+    Args:
+        config: Parsed application configuration.
+        force_console_oauth: Force the Google Drive connector to use the
+            console-based OAuth exchange even when a local browser is available.
+        force_token_refresh: Remove any cached Google Drive token so the next
+            authorization round-trips through Google and issues a new refresh
+            token.
+    """
+
     if config.provider == "google_drive":
         if not config.google_drive:
             raise ValueError("Google Drive configuration missing")
@@ -261,6 +272,7 @@ def build_output_handler(config: AppConfig) -> MarkdownOutputHandler:
             remote=config.output.obsidian.remote,
             commit_message_template=config.output.obsidian.commit_message_template,
             media_mode=config.output.obsidian.media_mode,
+            media_invert=config.output.obsidian.media_invert,
             private_key_path=config.output.obsidian.private_key_path,
             known_hosts_path=config.output.obsidian.known_hosts_path,
             push=config.output.obsidian.push,
@@ -277,6 +289,16 @@ def build_processor(
     force_console_oauth: bool = False,
     force_token_refresh: bool = False,
 ) -> PDFProcessor:
+    """Construct the PDF processor with optional Google Drive OAuth overrides.
+
+    Args:
+        config: Parsed application configuration.
+        force_console_oauth: Propagate the console-mode OAuth requirement to the
+            connector.
+        force_token_refresh: Drop any cached OAuth token before building the
+            connector so the run performs a fresh authorization.
+    """
+
     connector = build_connector(
         config,
         force_console_oauth=force_console_oauth,

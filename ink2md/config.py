@@ -79,7 +79,8 @@ class ObsidianOutputConfig:
     push: bool = True
     private_key_path: Optional[Path] = None
     known_hosts_path: Optional[Path] = None
-    media_mode: Literal["pdf", "png"] = "pdf"
+    media_mode: Literal["pdf", "png", "jpg"] = "pdf"
+    media_invert: bool = False
 
 
 @dataclass(slots=True)
@@ -176,9 +177,16 @@ class AppConfig:
                 obsidian_data.get("known_hosts_path")
             )
             media_mode = obsidian_data.get("media_mode", "pdf").lower()
-            if media_mode not in {"pdf", "png"}:
+            if media_mode == "jpeg":
+                media_mode = "jpg"
+            if media_mode not in {"pdf", "png", "jpg"}:
                 raise ValueError(
-                    "output.obsidian.media_mode must be either 'pdf' or 'png'"
+                    "output.obsidian.media_mode must be one of 'pdf', 'png', or 'jpg'"
+                )
+            media_invert = bool(obsidian_data.get("media_invert", False))
+            if media_invert and media_mode not in {"png", "jpg"}:
+                raise ValueError(
+                    "output.obsidian.media_invert is only supported when media_mode is 'png' or 'jpg'"
                 )
             obsidian_cfg = ObsidianOutputConfig(
                 repository_path=repository_path,
@@ -193,6 +201,7 @@ class AppConfig:
                 private_key_path=private_key_path,
                 known_hosts_path=known_hosts_path,
                 media_mode=media_mode,  # type: ignore[arg-type]
+                media_invert=media_invert,
             )
 
         if asset_dir is None and output_provider == "obsidian":

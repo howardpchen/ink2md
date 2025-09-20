@@ -104,6 +104,120 @@ def test_obsidian_handler_copies_pdf_and_appends_reference(tmp_path: Path) -> No
     assert history == "2"
 
 
+def test_obsidian_handler_renders_jpgs_for_jpg_mode(tmp_path: Path) -> None:
+    pytest.importorskip(
+        "pypdfium2", reason="pypdfium2 is required to render pages into JPEG files"
+    )
+    Image = pytest.importorskip("PIL.Image", reason="Pillow is required to inspect JPEGs")
+
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _init_git_repository(remote)
+    _seed_commit(remote, "README.md")
+
+    vault_path = tmp_path / "vault"
+    handler = ObsidianVaultOutputHandler(
+        repository_path=vault_path,
+        repository_url=str(remote),
+        directory="notes",
+        media_directory="assets",
+        media_mode="jpg",
+        push=False,
+    )
+    _configure_clone_identity(vault_path)
+
+    pdf_writer = PdfWriter()
+    pdf_writer.add_blank_page(width=612, height=792)
+    buffer = io.BytesIO()
+    pdf_writer.write(buffer)
+    pdf_bytes = buffer.getvalue()
+
+    timestamp = datetime(2024, 9, 18, 10, 30, tzinfo=timezone.utc)
+    document = CloudDocument(
+        identifier="doc-3",
+        name="Project Scope",
+        modified_at=timestamp,
+    )
+
+    markdown = "# Scope\n"
+    handler.write(document, markdown, pdf_bytes=pdf_bytes)
+
+    image_files = sorted((vault_path / "assets").glob("*.jpg"))
+    assert len(image_files) == 1
+    image_file = image_files[0]
+    assert image_file.stem == "Project-Scope-20240918103000-p01"
+
+    with Image.open(image_file) as img:
+        assert img.format == "JPEG"
+        assert img.mode == "L"
+
+
+def test_obsidian_handler_inverts_grayscale_when_requested(tmp_path: Path) -> None:
+    pytest.importorskip(
+        "pypdfium2", reason="pypdfium2 is required to render pages into PNG files"
+    )
+    Image = pytest.importorskip("PIL.Image", reason="Pillow is required to inspect PNGs")
+
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _init_git_repository(remote)
+    _seed_commit(remote, "README.md")
+
+    vault_path = tmp_path / "vault"
+    handler = ObsidianVaultOutputHandler(
+        repository_path=vault_path,
+        repository_url=str(remote),
+        directory="notes",
+        media_directory="assets",
+        media_mode="png",
+        media_invert=True,
+        push=False,
+    )
+    _configure_clone_identity(vault_path)
+
+    pdf_writer = PdfWriter()
+    pdf_writer.add_blank_page(width=612, height=792)
+    buffer = io.BytesIO()
+    pdf_writer.write(buffer)
+    pdf_bytes = buffer.getvalue()
+
+    timestamp = datetime(2024, 9, 18, 10, 30, tzinfo=timezone.utc)
+    document = CloudDocument(
+        identifier="doc-4",
+        name="Inverted",
+        modified_at=timestamp,
+    )
+
+    markdown = "# Inverted\n"
+    handler.write(document, markdown, pdf_bytes=pdf_bytes)
+
+    image_files = list((vault_path / "assets").glob("*.png"))
+    assert len(image_files) == 1
+    with Image.open(image_files[0]) as img:
+        minima, maxima = img.getextrema()
+        assert maxima < 128
+        assert minima == maxima
+
+
+def test_obsidian_handler_rejects_media_invert_for_pdf_mode(tmp_path: Path) -> None:
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _init_git_repository(remote)
+    _seed_commit(remote, "README.md")
+
+    vault_path = tmp_path / "vault"
+    with pytest.raises(ValueError, match="media_invert is only supported"):
+        ObsidianVaultOutputHandler(
+            repository_path=vault_path,
+            repository_url=str(remote),
+            directory="notes",
+            media_directory="assets",
+            media_mode="pdf",
+            media_invert=True,
+            push=False,
+        )
+
+
 def test_obsidian_handler_renders_pngs_for_png_mode(tmp_path: Path) -> None:
     pytest.importorskip(
         "pypdfium2", reason="pypdfium2 is required to render pages into PNG files"

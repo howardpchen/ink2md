@@ -76,11 +76,13 @@ You will also need to supply:
   - `output.asset_directory` copies the original PDFs alongside the generated
     Markdown using the same timestamp suffix (for example,
     `Report-20240918103000.pdf`).
-  - When targeting an Obsidian vault, set `output.obsidian.media_mode` to `"png"`
-    to render each page as an 800px-wide, 8-bit grayscale PNG with additional
-    lossless optimization, or keep the default `"pdf"` to link back to the
-    source document. Existing configs that previously used `"jpg"` should be
-    updated to `"png"`. Generated Markdown and attachments now use the same
+  - When targeting an Obsidian vault, adjust `output.obsidian.media_mode` to
+    control how page assets are written: keep the default `"pdf"` to link back
+    to the source document, or choose `"png"`/`"jpg"` to render 800px-wide,
+    8-bit grayscale images (PNG output additionally runs through lossless
+    optimizers when available). Combine with the optional
+    `output.obsidian.media_invert` toggle to invert PNG or JPG pages before they
+    are committed to the vault. Generated Markdown and attachments use the same
     `<name>-<timestamp>` naming pattern as filesystem output to simplify
     cross-target automation.
 
@@ -96,8 +98,8 @@ browser, approve the requested scopes (the default is the read-only Drive scope)
 and paste either the verification code or the full redirected URL back into the
 running process. If you prefer to always perform the console-based exchange (for
 example when SSH tunneling from a workstation), pass `--headless-token` on the
-command line (which also refreshes the OAuth token). The connector extracts the
-authorization code, saves the
+command line to force the console prompt and discard any cached OAuth token
+before starting the flow. The connector extracts the authorization code, saves the
 refreshable token to `google_drive.oauth_token_file`, and subsequent runs reuse
 and transparently refresh that token so you do not need to reauthorize.
 
@@ -234,9 +236,9 @@ Follow the printed OAuth link in a browser, approve the consent screen, and
 wait for the run to finish. When running on a headless host the command will
 print the URL and, after you authorize in a separate browser, prompt for the
 verification code—paste it back into the SSH session to complete the flow. Add
-`--headless-token` if you want to force this console prompt (and refresh the
-token cache) even when the host can launch a browser. The resulting token is
-saved to
+`--headless-token` if you want to force this console prompt and remove the
+existing token cache before reauthorizing even when the host can launch a
+browser. The resulting token is saved to
 `/var/lib/ink2md/google_drive_token.json`; subsequent service runs reuse it
 automatically.
 

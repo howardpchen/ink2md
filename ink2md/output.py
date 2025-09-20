@@ -246,6 +246,7 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
             "A new file from you has been added: {markdown_path}"
         ),
         media_mode: str = "pdf",
+        media_invert: bool = False,
         private_key_path: str | Path | None = None,
         known_hosts_path: str | Path | None = None,
         push: bool = True,
@@ -253,8 +254,13 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
         self.repository_path = Path(repository_path).expanduser().resolve()
         self.repository_url = repository_url
         self.media_mode = media_mode.lower()
-        if self.media_mode not in {"pdf", "png"}:
-            raise ValueError("media_mode must be either 'pdf' or 'png'")
+        if self.media_mode not in {"pdf", "png", "jpg"}:
+            raise ValueError("media_mode must be one of 'pdf', 'png', or 'jpg'")
+        self.media_invert = bool(media_invert)
+        if self.media_invert and self.media_mode not in {"png", "jpg"}:
+            raise ValueError(
+                "media_invert is only supported when media_mode is 'png' or 'jpg'"
+            )
 
         self._png_optimizer = (
             self._select_png_optimizer() if self.media_mode == "png" else None
@@ -518,10 +524,11 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
                     scale = 800.0 / width
                 bitmap = page.render(scale=scale)
                 try:
+                    suffix = ".png" if self.media_mode == "png" else ".jpg"
                     image_path = self._unique_path(
-                        self.media_directory, f"{base_stem}-p{index:02d}", ".png"
+                        self.media_directory, f"{base_stem}-p{index:02d}", suffix
                     )
-                    from PIL import Image  # Imported lazily to keep Pillow optional at runtime
+                    from PIL import Image, ImageOps  # Lazy import to keep Pillow optional
 
                     pil_image = bitmap.to_pil()
                     lanczos = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
@@ -543,15 +550,29 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
                             image.close()
                             image = resized
 
-                        image.save(
-                            image_path,
-                            format="PNG",
-                            optimize=True,
-                            compress_level=9,
-                        )
+                        if self.media_invert:
+                            inverted = ImageOps.invert(image)
+                            image.close()
+                            image = inverted
+
+                        if self.media_mode == "png":
+                            image.save(
+                                image_path,
+                                format="PNG",
+                                optimize=True,
+                                compress_level=9,
+                            )
+                        else:
+                            image.save(
+                                image_path,
+                                format="JPEG",
+                                optimize=True,
+                                quality=90,
+                            )
                     finally:
                         image.close()
-                    self._optimize_png(image_path)
+                    if self.media_mode == "png":
+                        self._optimize_png(image_path)
                     images.append(image_path)
                 finally:
                     bitmap.close()

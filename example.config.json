@@ -13,6 +13,7 @@
       "private_key_path": "/etc/ink2md/ssh/id_ed25519",
       "known_hosts_path": "/etc/ink2md/ssh/known_hosts",
       "media_mode": "pdf",
+      "media_invert": false,
       "push": true
     }
   },
