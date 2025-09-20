@@ -20,6 +20,7 @@ WAS_ACTIVE=0
 POST_INSTALL_NOTES=()
 GIT_USER_NAME=""
 GIT_USER_EMAIL=""
+OBS_REPOSITORY_URL=""
 
 add_post_install_note() {
   local note existing
@@ -155,6 +156,7 @@ command -v rsync >/dev/null 2>&1 || { echo "rsync is required." >&2; exit 1; }
 command -v runuser >/dev/null 2>&1 || { echo "runuser is required." >&2; exit 1; }
 command -v ssh-keygen >/dev/null 2>&1 || { echo "ssh-keygen is required." >&2; exit 1; }
 command -v ssh-keyscan >/dev/null 2>&1 || { echo "ssh-keyscan is required." >&2; exit 1; }
+command -v git >/dev/null 2>&1 || { echo "git is required." >&2; exit 1; }
 if ! "$PYTHON_BIN" -c "import ensurepip" >/dev/null 2>&1; then
   echo "The interpreter at $PYTHON_BIN is missing the standard ensurepip module." >&2
   echo "Install the python3-venv package (e.g. 'apt install python3-venv') or rerun with --python pointing to an interpreter that bundles ensurepip." >&2
@@ -206,7 +208,7 @@ ensure_user_properties() {
 
 ensure_directories() {
   local path
-  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$OUTPUT_DIR" "$ASSET_DIR" "$CONFIG_DIR" "$CREDENTIALS_DIR" "$SSH_DIR" "$CLOUD_VAULT_DIR" "$CLOUD_VAULT_INBOX" "$CLOUD_VAULT_ASSETS" /var/tmp/ink2md; do
+  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$CONFIG_DIR" "$CREDENTIALS_DIR" "$SSH_DIR" /var/tmp/ink2md; do
     if [[ -e "$path" && ! -d "$path" ]]; then
       echo "Refusing to use existing non-directory path: $path" >&2
       exit 1
@@ -215,13 +217,8 @@ ensure_directories() {
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$INSTALL_PREFIX"
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$STATE_DIR"
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$STATE_DATA_DIR"
-  install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$OUTPUT_DIR"
-  install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$ASSET_DIR"
   install -d -o root -g "$SERVICE_GROUP" -m 750 "$CONFIG_DIR"
   install -d -o root -g "$SERVICE_GROUP" -m 750 "$CREDENTIALS_DIR"
-  install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$CLOUD_VAULT_DIR"
-  install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$CLOUD_VAULT_INBOX"
-  install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$CLOUD_VAULT_ASSETS"
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 /var/tmp/ink2md
 }
 
@@ -374,6 +371,33 @@ config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 }
 
+read_obsidian_repository_url() {
+  if [[ ! -f "$CONFIG_PATH" ]]; then
+    return
+  fi
+  "$PYTHON_BIN" - <<'PY' "$CONFIG_PATH"
+import json
+import sys
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+try:
+    data = json.loads(config_path.read_text(encoding="utf-8"))
+except json.JSONDecodeError:
+    sys.exit(0)
+
+output = data.get("output", {})
+if not isinstance(output, dict):
+    sys.exit(0)
+
+obsidian = output.get("obsidian")
+if isinstance(obsidian, dict):
+    url = obsidian.get("repository_url")
+    if isinstance(url, str):
+        print(url.strip())
+PY
+}
+
 ensure_config_and_env() {
   if [[ ! -f "$CONFIG_PATH" ]]; then
     echo "Copying example configuration to $CONFIG_PATH"
@@ -398,6 +422,7 @@ ensure_config_and_env() {
   fi
   ensure_credentials_placeholder
   add_post_install_note "Perform the Google Drive OAuth bootstrap once with: sudo -u ${SERVICE_USER} ${INSTALL_PREFIX}/.venv/bin/ink2md --config ${CONFIG_PATH} --once"
+  OBS_REPOSITORY_URL=$(read_obsidian_repository_url || true)
 }
 
 ensure_credentials_placeholder() {
@@ -425,6 +450,52 @@ ensure_ssh_credentials() {
   chmod 600 "$PRIVATE_KEY_PATH" || true
   chmod 644 "$PUBLIC_KEY_PATH" || true
   add_post_install_note "Add the deploy key from ${PUBLIC_KEY_PATH} to your Obsidian Git provider."
+}
+
+clone_obsidian_repository() {
+  local repo_url="$OBS_REPOSITORY_URL"
+  if [[ -z "$repo_url" ]]; then
+    return
+  fi
+  if [[ "$repo_url" == *"your-org"* || "$repo_url" == *"example"* ]]; then
+    add_post_install_note "Update output.obsidian.repository_url in ${CONFIG_PATH} and rerun cloning for ${CLOUD_VAULT_DIR}."
+    return
+  fi
+
+  if [[ -d "$CLOUD_VAULT_DIR/.git" ]]; then
+    return
+  fi
+
+  if [[ -e "$CLOUD_VAULT_DIR" && ! -d "$CLOUD_VAULT_DIR" ]]; then
+    echo "Refusing to use existing non-directory path: $CLOUD_VAULT_DIR" >&2
+    exit 1
+  fi
+
+  if [[ -d "$CLOUD_VAULT_DIR" ]]; then
+    if find "$CLOUD_VAULT_DIR" -mindepth 1 -print -quit >/dev/null 2>&1; then
+      add_post_install_note "Obsidian vault directory ${CLOUD_VAULT_DIR} already exists; clone or initialize the repository manually."
+      return
+    fi
+  fi
+
+  local destination_basename
+  destination_basename=$(basename "$CLOUD_VAULT_DIR")
+  echo "Cloning Obsidian repository from $repo_url into $CLOUD_VAULT_DIR"
+  if ! runuser -u "$SERVICE_USER" -- bash -lc "cd \"$INSTALL_PREFIX\" && git clone \"$repo_url\" \"$destination_basename\""; then
+    add_post_install_note "Failed to clone $repo_url into ${CLOUD_VAULT_DIR}; initialize the vault manually."
+  fi
+}
+
+ensure_vault_directories() {
+  local path
+  for path in "$CLOUD_VAULT_DIR" "$CLOUD_VAULT_INBOX" "$CLOUD_VAULT_ASSETS" "$OUTPUT_DIR" "$ASSET_DIR"; do
+    [[ -z "$path" ]] && continue
+    if [[ -e "$path" && ! -d "$path" ]]; then
+      echo "Refusing to use existing non-directory path: $path" >&2
+      exit 1
+    fi
+    install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$path"
+  done
 }
 
 seed_known_hosts() {
@@ -472,8 +543,13 @@ configure_git_identity() {
     return
   fi
 
-  runuser -u "$SERVICE_USER" -- git config --global user.name "$GIT_USER_NAME"
-  runuser -u "$SERVICE_USER" -- git config --global user.email "$GIT_USER_EMAIL"
+  local git_dir="$CLOUD_VAULT_DIR"
+  if [[ ! -d "$git_dir" ]]; then
+    git_dir="$INSTALL_PREFIX"
+  fi
+
+  runuser -u "$SERVICE_USER" -- bash -lc "cd \"$git_dir\" && git config --global user.name \"$GIT_USER_NAME\""
+  runuser -u "$SERVICE_USER" -- bash -lc "cd \"$git_dir\" && git config --global user.email \"$GIT_USER_EMAIL\""
 }
 
 ensure_state_file() {
@@ -535,8 +611,12 @@ print_post_install_notes() {
   fi
   echo
   echo "Configured git identity for ${SERVICE_USER}:"
-  runuser -u "$SERVICE_USER" -- git config --global --get user.name || echo "  user.name: (not set)"
-  runuser -u "$SERVICE_USER" -- git config --global --get user.email || echo "  user.email: (not set)"
+  local git_dir="$CLOUD_VAULT_DIR"
+  if [[ ! -d "$git_dir" ]]; then
+    git_dir="$INSTALL_PREFIX"
+  fi
+  runuser -u "$SERVICE_USER" -- bash -lc "cd \"$git_dir\" && git config --global --get user.name" || echo "  user.name: (not set)"
+  runuser -u "$SERVICE_USER" -- bash -lc "cd \"$git_dir\" && git config --global --get user.email" || echo "  user.email: (not set)"
 }
 
 render_template() {
@@ -630,6 +710,8 @@ main() {
   sync_repository
   setup_virtualenv
   ensure_config_and_env
+  clone_obsidian_repository
+  ensure_vault_directories
   ensure_ssh_credentials
   seed_known_hosts
   configure_git_identity
