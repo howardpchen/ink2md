@@ -239,6 +239,8 @@ def test_build_connector_oauth_refreshes_expired_token(monkeypatch: pytest.Monke
 
 
 def test_build_connector_oauth_runs_flow_when_missing_token(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("DISPLAY", ":0")
+
     class DummyCredentials:
         def __init__(self, token_json: str = "{\"token\": \"flow\"}") -> None:
             self.valid = True
@@ -256,15 +258,28 @@ def test_build_connector_oauth_runs_flow_when_missing_token(monkeypatch: pytest.
     class DummyInstalledAppFlow:
         from_file_calls: list[tuple[str, tuple[str, ...]]] = []
         run_calls = 0
+        fetch_codes: list[str] = []
 
         @classmethod
         def from_client_secrets_file(cls, filename: str, scopes: list[str]):
             cls.from_file_calls.append((filename, tuple(scopes)))
             return cls()
 
+        def __init__(self) -> None:
+            self.client_config = {"redirect_uris": ["urn:ietf:wg:oauth:2.0:oob"]}
+            self.redirect_uri = None
+            self.credentials: DummyCredentials | None = None
+
         def run_local_server(self, port: int = 0, **kwargs):
             type(self).run_calls += 1
             return DummyCredentials()
+
+        def authorization_url(self, **kwargs):
+            return "https://example.com/auth", {}
+
+        def fetch_token(self, code: str):
+            type(self).fetch_codes.append(code)
+            self.credentials = DummyCredentials()
 
     def fake_build(service_name: str, version: str, credentials):
         fake_build.calls.append((service_name, version, credentials))
@@ -290,6 +305,85 @@ def test_build_connector_oauth_runs_flow_when_missing_token(monkeypatch: pytest.
     ]
     assert DummyInstalledAppFlow.run_calls == 1
     token_file = client_secrets.with_name("client_token.json")
+    assert token_file.exists()
+    assert token_file.read_text(encoding="utf-8") == "{\"token\": \"flow\"}"
+
+
+def test_build_connector_oauth_manual_flow_allows_pasted_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class DummyCredentials:
+        def __init__(self, token_json: str = "{\"token\": \"flow\"}") -> None:
+            self.valid = True
+            self.expired = False
+            self.refresh_token = None
+            self._token_json = token_json
+
+        def refresh(self, request):  # pragma: no cover - not used
+            raise AssertionError("refresh should not be called in manual flow")
+
+        def to_json(self) -> str:
+            return self._token_json
+
+    class DummyInstalledAppFlow:
+        from_file_calls: list[tuple[str, tuple[str, ...]]] = []
+        run_calls = 0
+        fetch_codes: list[str] = []
+
+        @classmethod
+        def from_client_secrets_file(cls, filename: str, scopes: list[str]):
+            cls.from_file_calls.append((filename, tuple(scopes)))
+            return cls()
+
+        def __init__(self) -> None:
+            self.client_config = {"redirect_uris": ["urn:ietf:wg:oauth:2.0:oob"]}
+            self.redirect_uri = None
+            self.credentials: DummyCredentials | None = None
+
+        def run_local_server(self, *args, **kwargs):  # pragma: no cover - forced manual
+            type(self).run_calls += 1
+            raise RuntimeError("Local server unavailable")
+
+        def authorization_url(self, **kwargs):
+            return "https://example.com/auth", {}
+
+        def fetch_token(self, code: str):
+            type(self).fetch_codes.append(code)
+            self.credentials = DummyCredentials()
+
+    def fake_build(service_name: str, version: str, credentials):
+        fake_build.calls.append((service_name, version, credentials))
+        return object()
+
+    fake_build.calls = []  # type: ignore[attr-defined]
+
+    _install_oauth_modules(monkeypatch, DummyCredentials, DummyInstalledAppFlow, fake_build)
+
+    for env_var in ("DISPLAY", "WAYLAND_DISPLAY", "BROWSER"):
+        monkeypatch.delenv(env_var, raising=False)
+
+    client_secrets = tmp_path / "client.json"
+    client_secrets.write_text("{}", encoding="utf-8")
+
+    pasted_url = (
+        "https://localhost/oauth2callback?state=xyz&code=manual-code&scope="
+        "https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.readonly"
+    )
+    inputs = iter([pasted_url])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    config_dict = _base_app_config(tmp_path)
+    config_dict["google_drive"] = {
+        "folder_id": "folder-headless",
+        "oauth_client_secrets_file": str(client_secrets),
+        "oauth_token_file": str(tmp_path / "token.json"),
+    }
+
+    connector = build_connector(AppConfig.from_dict(config_dict))
+
+    assert isinstance(connector, GoogleDriveConnector)
+    assert DummyInstalledAppFlow.fetch_codes == ["manual-code"]
+    token_file = tmp_path / "token.json"
     assert token_file.exists()
     assert token_file.read_text(encoding="utf-8") == "{\"token\": \"flow\"}"
 

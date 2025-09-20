@@ -46,6 +46,46 @@ def _extract_code_from_user_input(raw_value: str) -> str:
     return value
 
 
+def _complete_console_oauth_flow(flow) -> "Credentials":
+    """Guide the user through the console-based OAuth exchange."""
+
+    LOGGER.info(
+        "Headless environment detected; using console-based Google Drive OAuth flow."
+    )
+
+    if not flow.redirect_uri:
+        redirect_uris = flow.client_config.get("redirect_uris") or []
+        if redirect_uris:
+            flow.redirect_uri = redirect_uris[0]
+
+    authorization_url, _ = flow.authorization_url(
+        prompt="consent",
+        access_type="offline",
+        include_granted_scopes="true",
+    )
+    LOGGER.info("Authorize access by visiting:\n%s\n", authorization_url)
+    LOGGER.info(
+        "After approving the request, return here and paste either the verification "
+        "code or the full redirected URL."
+    )
+
+    while True:
+        user_input = input(
+            "Paste the verification code or redirected URL from Google: "
+        )
+        try:
+            code = _extract_code_from_user_input(user_input)
+        except ValueError as exc:
+            LOGGER.error("%s. Please try again.", exc)
+            continue
+        try:
+            flow.fetch_token(code=code)
+        except Exception as exc:  # pragma: no cover - depends on oauthlib internals
+            LOGGER.error("Token exchange failed: %s", exc)
+            continue
+        return flow.credentials
+
+
 @dataclass(slots=True)
 class PDFProcessor:
     """Coordinate the flow between connectors, LLMs, and storage."""
@@ -118,44 +158,24 @@ def build_connector(config: AppConfig) -> CloudConnector:
                     "Drive access. If this host is headless, copy the URL into a "
                     "browser on another machine and complete the consent flow: {url}"
                 )
-                if open_browser:
-                    credentials = flow.run_local_server(
-                        port=0,
-                        open_browser=True,
-                        authorization_prompt_message=prompt,
-                    )
-                else:
-                    LOGGER.info(
-                        "Headless environment detected; using console-based Google Drive OAuth flow."
-                    )
-                    if not flow.redirect_uri:
-                        redirect_uris = flow.client_config.get("redirect_uris") or []
-                        if redirect_uris:
-                            flow.redirect_uri = redirect_uris[0]
-                    authorization_url, _ = flow.authorization_url(
-                        prompt="consent",
-                        access_type="offline",
-                        include_granted_scopes="true",
-                    )
-                    LOGGER.info(
-                        "Authorize access by visiting:\n%s\n",
-                        authorization_url,
-                    )
-                    LOGGER.info(
-                        "After approving the request, return to this terminal and paste "
-                        "either the verification code or the final redirected URL."
-                    )
-                    while True:
-                        user_input = input(
-                            "Paste the verification code or redirected URL from Google: "
+                credentials = None
+                use_console_flow = not open_browser
+                if not use_console_flow:
+                    try:
+                        credentials = flow.run_local_server(
+                            port=0,
+                            open_browser=True,
+                            authorization_prompt_message=prompt,
                         )
-                        try:
-                            code = _extract_code_from_user_input(user_input)
-                        except ValueError as exc:
-                            LOGGER.error("%s. Please try again.", exc)
-                            continue
-                        flow.fetch_token(code=code)
-                        break
+                    except Exception as exc:  # pragma: no cover - defensive
+                        LOGGER.warning(
+                            "Local server OAuth flow failed (%s); falling back to console flow.",
+                            exc,
+                        )
+                        use_console_flow = True
+
+                if use_console_flow:
+                    credentials = _complete_console_oauth_flow(flow)
                     credentials = flow.credentials
 
             token_path.parent.mkdir(parents=True, exist_ok=True)
