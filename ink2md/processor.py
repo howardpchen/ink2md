@@ -22,7 +22,7 @@ from .output import (
 )
 from .state import ProcessingState
 
-LOGGER = logging.getLogger("cloud_monitor_pdf2md")
+LOGGER = logging.getLogger("ink2md")
 
 
 @dataclass(slots=True)

@@ -1,4 +1,4 @@
-"""LLM client implementations for Cloud Monitor PDF2MD."""
+"""LLM client implementations for Ink2MD."""
 
 from .base import LLMClient
 from .gemini import GeminiLLMClient

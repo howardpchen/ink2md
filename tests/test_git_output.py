@@ -7,8 +7,8 @@ from pathlib import Path
 
 from datetime import datetime, timezone
 
-from cloud_monitor_pdf2md.connectors.base import CloudDocument
-from cloud_monitor_pdf2md.output import GitMarkdownOutputHandler
+from ink2md.connectors.base import CloudDocument
+from ink2md.output import GitMarkdownOutputHandler
 
 
 def _init_git_repository(path: Path) -> None:

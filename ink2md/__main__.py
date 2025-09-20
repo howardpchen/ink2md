@@ -1,4 +1,4 @@
-"""Module entrypoint for ``python -m cloud_monitor_pdf2md``."""
+"""Module entrypoint for ``python -m ink2md``."""
 
 from .cli import main
 

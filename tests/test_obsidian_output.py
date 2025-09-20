@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 from pypdf import PdfWriter
 
-from cloud_monitor_pdf2md.connectors.base import CloudDocument
-from cloud_monitor_pdf2md.output import ObsidianVaultOutputHandler
+from ink2md.connectors.base import CloudDocument
+from ink2md.output import ObsidianVaultOutputHandler
 
 
 def _init_git_repository(path: Path) -> None:

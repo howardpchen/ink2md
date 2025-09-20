@@ -1,4 +1,4 @@
-"""Configuration utilities for the Cloud Monitor PDF2MD project."""
+"""Configuration utilities for the Ink2MD project."""
 
 from __future__ import annotations
 

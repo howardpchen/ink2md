@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from cloud_monitor_pdf2md.config import AppConfig
-from cloud_monitor_pdf2md.connectors.google_drive import GoogleDriveConnector
-from cloud_monitor_pdf2md.processor import build_connector
-from cloud_monitor_pdf2md.processor import build_llm_client
+from ink2md.config import AppConfig
+from ink2md.connectors.google_drive import GoogleDriveConnector
+from ink2md.processor import build_connector
+from ink2md.processor import build_llm_client
 
 
 def _base_app_config(tmp_path: Path) -> dict:
@@ -261,7 +261,7 @@ def test_build_connector_oauth_runs_flow_when_missing_token(monkeypatch: pytest.
             cls.from_file_calls.append((filename, tuple(scopes)))
             return cls()
 
-        def run_local_server(self, port: int = 0):
+        def run_local_server(self, port: int = 0, **kwargs):
             type(self).run_calls += 1
             return DummyCredentials()
 
@@ -294,7 +294,7 @@ def test_build_connector_oauth_runs_flow_when_missing_token(monkeypatch: pytest.
 
 
 def test_build_llm_client_gemini(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    import cloud_monitor_pdf2md.llm.gemini as gemini_module
+    import ink2md.llm.gemini as gemini_module
 
     created_kwargs: dict[str, object] = {}
 
@@ -324,4 +324,3 @@ def test_build_llm_client_gemini(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     assert created_kwargs["model"] == "models/gemini-2.5-flash"
     assert created_kwargs["prompt"] == "Summarize"
     assert created_kwargs["temperature"] == 0.15
-

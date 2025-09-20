@@ -1,5 +1,5 @@
 [Unit]
-Description=Run Cloud Monitor PDF2MD health probe every 10 minutes
+Description=Run Ink2MD health probe every 10 minutes
 
 [Timer]
 OnBootSec=5m

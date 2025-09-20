@@ -1,8 +1,8 @@
 [project]
-name = "cloud-monitor-pdf2md"
+name = "ink2md"
 version = "0.1.0"
 description = "Monitor cloud folders for new PDFs and convert them to Markdown."
-authors = [{ name = "Cloud Monitor PDF2MD" }]
+authors = [{ name = "Ink2MD" }]
 requires-python = ">=3.10"
 dependencies = [
     "pypdf>=4.0.0",
@@ -18,8 +18,8 @@ dev = [
 ]
 
 [project.scripts]
-cloud-monitor-pdf2md = "cloud_monitor_pdf2md.cli:main"
+ink2md = "ink2md.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["cloud_monitor_pdf2md*"]
+include = ["ink2md*"]
 exclude = ["tests*", "output*", "state*", "deploy*", "prompts*", "credentials*"]

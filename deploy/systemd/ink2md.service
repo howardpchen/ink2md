@@ -1,6 +1,6 @@
 [Unit]
-Description=Cloud Monitor PDF2MD
-Documentation=https://github.com/howardpchen/cloud-monitor-pdf2md
+Description=Ink2MD processor service
+Documentation=https://github.com/howardpchen/ink2md
 After=network-online.target
 Wants=network-online.target
 
@@ -10,10 +10,10 @@ User=${SERVICE_USER}
 Group=${SERVICE_GROUP}
 WorkingDirectory=${INSTALL_PREFIX}
 EnvironmentFile=${ENV_FILE}
-ExecStart=${INSTALL_PREFIX}/.venv/bin/cloud-monitor-pdf2md --config ${CONFIG_PATH}
+ExecStart=${INSTALL_PREFIX}/.venv/bin/ink2md --config ${CONFIG_PATH}
 Restart=on-failure
 RestartSec=10
-RuntimeDirectory=cloud-monitor
+RuntimeDirectory=ink2md
 RuntimeDirectoryMode=0750
 ProtectSystem=full
 ProtectHome=read-only

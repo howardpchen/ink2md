@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from cloud_monitor_pdf2md.config import AppConfig
+from ink2md.config import AppConfig
 
 
 def _base_config_dict(tmp_path: Path) -> dict:

@@ -1,6 +1,6 @@
-# Cloud Monitor PDF2MD
+# Ink2MD
 
-Cloud Monitor PDF2MD is a Python project that watches a configured folder in a
+Ink2MD is a Python project that watches a configured folder in a
 cloud storage service, identifies new PDF files, and converts them into clean
 Markdown using a Large Language Model (LLM) vision endpoint. The first target
 integration focuses on Google Drive, with the goal of supporting additional
@@ -132,13 +132,13 @@ The project exposes a console script and module entrypoint. Assuming a
 configuration file similar to [`example.config.json`](example.config.json), run:
 
 ```bash
-cloud-monitor-pdf2md --config example.config.json --once
+ink2md --config example.config.json --once
 ```
 
 or with Python directly:
 
 ```bash
-python -m cloud_monitor_pdf2md --config example.config.json
+python -m ink2md --config example.config.json
 ```
 
 Omit `--once` to continuously poll the configured provider using the
@@ -177,33 +177,33 @@ sudo ./scripts/install_service.sh
 Before running the installer ensure the host has the standard Python tooling
 available—for most Debian/Ubuntu systems the following covers everything the
 script expects: `sudo apt install python3 python3-venv python3-pip rsync`. The
-installer copies the repository to `/opt/pdf2md-monitor`, creates the
-`pdf2md-monitor` service account, bootstraps a virtual environment, renders the
+installer copies the repository to `/opt/ink2md`, creates the
+`ink2md` service account, bootstraps a virtual environment, renders the
 systemd units, and enables the health check + retention timers. Re-run it after
 pulling new changes to deploy upgrades. Override paths or toggle timers with
 flags such as `--prefix`, `--config-dir`, `--skip-healthcheck`, and
 `--skip-purge`.
 
 When the script completes it prints any manual follow-up items (for example,
-editing `/etc/pdf2md-monitor/config.json` and `/etc/pdf2md-monitor/env`). It
-also creates `/etc/pdf2md-monitor/credentials/client_secrets.json` as a
+editing `/etc/ink2md/config.json` and `/etc/ink2md/env`). It
+also creates `/etc/ink2md/credentials/client_secrets.json` as a
 placeholder—replace it with your real Google Drive OAuth client JSON before
 continuing. The installer generates an SSH deploy key at
-`/etc/pdf2md-monitor/ssh/id_ed25519` and seeds the `known_hosts` file based on
+`/etc/ink2md/ssh/id_ed25519` and seeds the `known_hosts` file based on
 the configured repository URL; copy the printed public key into the Git host
 that backs your Obsidian vault before starting the service. By default the
-configuration writes Markdown to `/opt/pdf2md-monitor/default-vault/inbox` and
-attachments to `/opt/pdf2md-monitor/default-vault/media`, with the repository
-root at `/opt/pdf2md-monitor/default-vault`. Clone or initialize your Obsidian
+configuration writes Markdown to `/opt/ink2md/default-vault/inbox` and
+attachments to `/opt/ink2md/default-vault/media`, with the repository
+root at `/opt/ink2md/default-vault`. Clone or initialize your Obsidian
 repository in that location and configure a Git identity for the
-`pdf2md-monitor` user, for example:
+`ink2md` user, for example:
 
 ```bash
-sudo -u pdf2md-monitor git clone git@github.com:your-org/obsidian-vault.git \
-  /opt/pdf2md-monitor/default-vault
-sudo -u pdf2md-monitor git -C /opt/pdf2md-monitor/default-vault config \
-  user.name "PDF2MD Monitor"
-sudo -u pdf2md-monitor git -C /opt/pdf2md-monitor/default-vault config \
+sudo -u ink2md git clone git@github.com:your-org/obsidian-vault.git \
+  /opt/ink2md/default-vault
+sudo -u ink2md git -C /opt/ink2md/default-vault config \
+  user.name "Ink2MD Service"
+sudo -u ink2md git -C /opt/ink2md/default-vault config \
   user.email "ops@example.com"
 ```
 
@@ -212,17 +212,17 @@ files apply the changes with:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl restart cloud-monitor-pdf2md.service
+sudo systemctl restart ink2md.service
 ```
 
-Use `systemctl status cloud-monitor-pdf2md` or `journalctl -u
-cloud-monitor-pdf2md.service` to confirm the deployment is healthy.
+Use `systemctl status ink2md` or `journalctl -u
+ink2md.service` to confirm the deployment is healthy.
 
 Authorize Google Drive access once before leaving the service unattended. Run
 
 ```bash
-sudo -u pdf2md-monitor /opt/pdf2md-monitor/.venv/bin/cloud-monitor-pdf2md \
-  --config /etc/pdf2md-monitor/config.json --once
+sudo -u ink2md /opt/ink2md/.venv/bin/ink2md \
+  --config /etc/ink2md/config.json --once
 ```
 
 Follow the printed OAuth link in a browser, approve the consent screen, and
@@ -230,14 +230,14 @@ wait for the run to finish. When running on a headless host the command will
 print the URL and, after you authorize in a separate browser, prompt for the
 verification code—paste it back into the SSH session to complete the flow. The
 resulting token is saved to
-`/var/lib/pdf2md-monitor/google_drive_token.json`; subsequent service runs reuse
+`/var/lib/ink2md/google_drive_token.json`; subsequent service runs reuse
 it automatically.
 
 The installer also updates `llm.prompt_path` to point at
-`/opt/pdf2md-monitor/prompts/default_prompt.txt`, and rewrites the Obsidian Git
+`/opt/ink2md/prompts/default_prompt.txt`, and rewrites the Obsidian Git
 settings to use the generated deploy key and known-hosts file under
-`/etc/pdf2md-monitor/ssh`. If you provide a custom prompt or different Git
-credentials, store them somewhere readable by `pdf2md-monitor` and adjust the
+`/etc/ink2md/ssh`. If you provide a custom prompt or different Git
+credentials, store them somewhere readable by `ink2md` and adjust the
 config to match.
 
 ### Manual Installation
@@ -250,21 +250,21 @@ them to reflect your target paths before copying them into place.
 
 ### Prepare the Host
 
-1. Create a dedicated service account, for example `sudo useradd --system --home /var/lib/pdf2md-monitor --shell /usr/sbin/nologin pdf2md-monitor`.
-2. Check out the repository to `/opt/pdf2md-monitor` (or another root owned by the service account) and install dependencies into `/opt/pdf2md-monitor/.venv`.
-3. Create writable directories for runtime state, logs, and temporary files such as `/var/lib/pdf2md-monitor` and `/var/tmp/pdf2md-monitor`. Grant ownership to the service user.
+1. Create a dedicated service account, for example `sudo useradd --system --home /var/lib/ink2md --shell /usr/sbin/nologin ink2md`.
+2. Check out the repository to `/opt/ink2md` (or another root owned by the service account) and install dependencies into `/opt/ink2md/.venv`.
+3. Create writable directories for runtime state, logs, and temporary files such as `/var/lib/ink2md` and `/var/tmp/ink2md`. Grant ownership to the service user.
 
 ### Install the Service
 
-1. Copy `deploy/systemd/cloud-monitor-pdf2md.service` to `/etc/systemd/system/` and adjust the service user, working directory, and virtual environment paths to match your host.
-2. Copy `deploy/systemd/cloud-monitor-pdf2md.env` to `/etc/pdf2md-monitor/env`,
+1. Copy `deploy/systemd/ink2md.service` to `/etc/systemd/system/` and adjust the service user, working directory, and virtual environment paths to match your host.
+2. Copy `deploy/systemd/ink2md.env` to `/etc/ink2md/env`,
    populate the credential paths and API keys, and set permissions so only the
-   service account can read the file (for example `chmod 640` and `chown pdf2md-monitor:pdf2md-monitor`).
+   service account can read the file (for example `chmod 640` and `chown ink2md:ink2md`).
 3. Place your runtime configuration (for example `config.json`) under
-   `/etc/pdf2md-monitor/` or another directory that the service account can access.
+   `/etc/ink2md/` or another directory that the service account can access.
 4. Reload systemd with `sudo systemctl daemon-reload`, enable the unit with
-   `sudo systemctl enable --now cloud-monitor-pdf2md`, and inspect service status
-   with `systemctl status cloud-monitor-pdf2md`.
+   `sudo systemctl enable --now ink2md`, and inspect service status
+   with `systemctl status ink2md`.
 
 ### Monitoring
 
@@ -274,16 +274,16 @@ monitoring stack or a systemd timer to ensure the pipeline keeps up with new
 documents:
 
 ```bash
-./scripts/check_processor_health.py --state-file /var/lib/pdf2md-monitor/state/processed.json \
-  --max-age 180 --journal-unit cloud-monitor-pdf2md
+./scripts/check_processor_health.py --state-file /var/lib/ink2md/state/processed.json \
+  --max-age 180 --journal-unit ink2md
 ```
 
 For automated checks, install the provided timer template:
 
-1. Copy `deploy/systemd/cloud-monitor-pdf2md-healthcheck.service` and `.timer`
+1. Copy `deploy/systemd/ink2md-healthcheck.service` and `.timer`
    to `/etc/systemd/system/`.
 2. Adjust the script path, state file, and thresholds in the service unit.
-3. Enable the timer with `sudo systemctl enable --now cloud-monitor-pdf2md-healthcheck.timer`.
+3. Enable the timer with `sudo systemctl enable --now ink2md-healthcheck.timer`.
 
 ### Rolling Purge
 
@@ -292,10 +292,10 @@ retaining the most recent 30 days. Schedule it via cron or a systemd timer
 alongside the service:
 
 ```bash
-./scripts/purge_output.py /var/lib/pdf2md-monitor/output --days 30 --recursive --remove-empty-dirs
+./scripts/purge_output.py /var/lib/ink2md/output --days 30 --recursive --remove-empty-dirs
 ```
 
-Timer templates in `deploy/systemd/cloud-monitor-pdf2md-purge.service` and
+Timer templates in `deploy/systemd/ink2md-purge.service` and
 `.timer` show how to run the purge job daily with a dry-run warning before
 permanent deletion. Copy them into place and enable the timer to keep the output
 volume bounded.

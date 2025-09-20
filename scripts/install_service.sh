@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SERVICE_NAME="cloud-monitor-pdf2md"
-INSTALL_PREFIX="/opt/pdf2md-monitor"
-CONFIG_DIR="/etc/pdf2md-monitor"
+SERVICE_NAME="ink2md"
+INSTALL_PREFIX="/opt/ink2md"
+CONFIG_DIR="/etc/ink2md"
 CONFIG_PATH=""
 ENV_FILE=""
-STATE_DIR="/var/lib/pdf2md-monitor"
-OUTPUT_DIR="/var/lib/pdf2md-monitor/output"
-SERVICE_USER="pdf2md-monitor"
+STATE_DIR="/var/lib/ink2md"
+OUTPUT_DIR="/var/lib/ink2md/output"
+SERVICE_USER="ink2md"
 SERVICE_GROUP=""
 RETENTION_DAYS="30"
 HEALTHCHECK_MAX_AGE="180"
@@ -37,13 +37,13 @@ usage() {
 Usage: sudo ./scripts/install_service.sh [options]
 
 Options:
-  --prefix PATH             Install directory for application files (default: /opt/pdf2md-monitor)
-  --config-dir PATH         Directory for configuration artifacts (default: /etc/pdf2md-monitor)
+  --prefix PATH             Install directory for application files (default: /opt/ink2md)
+  --config-dir PATH         Directory for configuration artifacts (default: /etc/ink2md)
   --config-path PATH        Runtime configuration JSON location (default: <config-dir>/config.json)
   --env-file PATH           Environment file location (default: <config-dir>/env)
-  --state-dir PATH          Directory for persistent state (default: /var/lib/pdf2md-monitor)
-  --output-dir PATH         Directory for generated Markdown/assets (default: /var/lib/pdf2md-monitor/output)
-  --user NAME               Service account user (default: pdf2md-monitor)
+  --state-dir PATH          Directory for persistent state (default: /var/lib/ink2md)
+  --output-dir PATH         Directory for generated Markdown/assets (default: /var/lib/ink2md/output)
+  --user NAME               Service account user (default: ink2md)
   --group NAME              Service account group (default: match user)
   --retention-days N        Retention window for purge timer (default: 30)
   --healthcheck-max-age N   Max minutes since last processed doc before alert (default: 180)
@@ -118,8 +118,8 @@ if [[ -z "$ENV_FILE" ]]; then
 fi
 
 if [[ -z "$GIT_USER_NAME" ]]; then
-  read -rp "Git user.name for ${SERVICE_USER} [default: pdf2md-monitor]: " GIT_USER_NAME
-  GIT_USER_NAME=${GIT_USER_NAME:-pdf2md-monitor}
+  read -rp "Git user.name for ${SERVICE_USER} [default: ink2md]: " GIT_USER_NAME
+  GIT_USER_NAME=${GIT_USER_NAME:-ink2md}
 fi
 
 if [[ -z "$GIT_USER_EMAIL" ]]; then
@@ -206,7 +206,7 @@ ensure_user_properties() {
 
 ensure_directories() {
   local path
-  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$OUTPUT_DIR" "$ASSET_DIR" "$CONFIG_DIR" "$CREDENTIALS_DIR" "$SSH_DIR" "$CLOUD_VAULT_DIR" "$CLOUD_VAULT_INBOX" "$CLOUD_VAULT_ASSETS" /var/tmp/pdf2md-monitor; do
+  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$OUTPUT_DIR" "$ASSET_DIR" "$CONFIG_DIR" "$CREDENTIALS_DIR" "$SSH_DIR" "$CLOUD_VAULT_DIR" "$CLOUD_VAULT_INBOX" "$CLOUD_VAULT_ASSETS" /var/tmp/ink2md; do
     if [[ -e "$path" && ! -d "$path" ]]; then
       echo "Refusing to use existing non-directory path: $path" >&2
       exit 1
@@ -222,7 +222,7 @@ ensure_directories() {
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$CLOUD_VAULT_DIR"
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$CLOUD_VAULT_INBOX"
   install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 "$CLOUD_VAULT_ASSETS"
-  install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 /var/tmp/pdf2md-monitor
+  install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 750 /var/tmp/ink2md
 }
 
 maybe_stop_service() {
@@ -389,7 +389,7 @@ ensure_config_and_env() {
   chmod 640 "$CONFIG_PATH" || true
   if [[ ! -f "$ENV_FILE" ]]; then
     echo "Provisioning environment file at $ENV_FILE"
-    install -D -o root -g "$SERVICE_GROUP" -m 640 "$REPO_ROOT/deploy/systemd/cloud-monitor-pdf2md.env" "$ENV_FILE"
+    install -D -o root -g "$SERVICE_GROUP" -m 640 "$REPO_ROOT/deploy/systemd/ink2md.env" "$ENV_FILE"
     add_post_install_note "Populate API keys, secrets, and credential paths in $ENV_FILE."
   else
     chgrp "$SERVICE_GROUP" "$ENV_FILE" || true
@@ -397,7 +397,7 @@ ensure_config_and_env() {
     add_post_install_note "Verify $ENV_FILE contains current API keys and secret paths."
   fi
   ensure_credentials_placeholder
-  add_post_install_note "Perform the Google Drive OAuth bootstrap once with: sudo -u ${SERVICE_USER} ${INSTALL_PREFIX}/.venv/bin/cloud-monitor-pdf2md --config ${CONFIG_PATH} --once"
+  add_post_install_note "Perform the Google Drive OAuth bootstrap once with: sudo -u ${SERVICE_USER} ${INSTALL_PREFIX}/.venv/bin/ink2md --config ${CONFIG_PATH} --once"
 }
 
 ensure_credentials_placeholder() {
@@ -574,28 +574,28 @@ install_systemd_units() {
   export SERVICE_NAME SERVICE_USER SERVICE_GROUP INSTALL_PREFIX CONFIG_PATH ENV_FILE STATE_FILE OUTPUT_DIR RETENTION_DAYS HEALTHCHECK_MAX_AGE
   local tmp
   tmp=$(mktemp)
-  render_template "$REPO_ROOT/deploy/systemd/cloud-monitor-pdf2md.service" "$tmp"
+  render_template "$REPO_ROOT/deploy/systemd/ink2md.service" "$tmp"
   install -o root -g root -m 644 "$tmp" "/etc/systemd/system/${SERVICE_NAME}.service"
   rm -f "$tmp"
 
   if [[ $SKIP_HEALTHCHECK -eq 0 ]]; then
     tmp=$(mktemp)
-    render_template "$REPO_ROOT/deploy/systemd/cloud-monitor-pdf2md-healthcheck.service" "$tmp"
+    render_template "$REPO_ROOT/deploy/systemd/ink2md-healthcheck.service" "$tmp"
     install -o root -g root -m 644 "$tmp" "/etc/systemd/system/${SERVICE_NAME}-healthcheck.service"
     rm -f "$tmp"
     tmp=$(mktemp)
-    render_template "$REPO_ROOT/deploy/systemd/cloud-monitor-pdf2md-healthcheck.timer" "$tmp"
+    render_template "$REPO_ROOT/deploy/systemd/ink2md-healthcheck.timer" "$tmp"
     install -o root -g root -m 644 "$tmp" "/etc/systemd/system/${SERVICE_NAME}-healthcheck.timer"
     rm -f "$tmp"
   fi
 
   if [[ $SKIP_PURGE -eq 0 ]]; then
     tmp=$(mktemp)
-    render_template "$REPO_ROOT/deploy/systemd/cloud-monitor-pdf2md-purge.service" "$tmp"
+    render_template "$REPO_ROOT/deploy/systemd/ink2md-purge.service" "$tmp"
     install -o root -g root -m 644 "$tmp" "/etc/systemd/system/${SERVICE_NAME}-purge.service"
     rm -f "$tmp"
     tmp=$(mktemp)
-    render_template "$REPO_ROOT/deploy/systemd/cloud-monitor-pdf2md-purge.timer" "$tmp"
+    render_template "$REPO_ROOT/deploy/systemd/ink2md-purge.timer" "$tmp"
     install -o root -g root -m 644 "$tmp" "/etc/systemd/system/${SERVICE_NAME}-purge.timer"
     rm -f "$tmp"
   fi

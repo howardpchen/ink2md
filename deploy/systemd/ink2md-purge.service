@@ -1,5 +1,5 @@
 [Unit]
-Description=Prune Cloud Monitor PDF2MD output beyond retention window
+Description=Prune Ink2MD output beyond retention window
 After=${SERVICE_NAME}.service
 
 [Service]

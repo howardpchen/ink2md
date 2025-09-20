@@ -1,5 +1,5 @@
 [Unit]
-Description=Run daily purge of Cloud Monitor PDF2MD output
+Description=Run daily purge of Ink2MD output
 
 [Timer]
 OnCalendar=daily

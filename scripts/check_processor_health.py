@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Health checks for the cloud-monitor-pdf2md processor."""
+"""Health checks for the ink2md processor."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--state-file",
         type=Path,
-        default=Path("/var/lib/cloud-monitor/state.json"),
+        default=Path("/var/lib/ink2md/state.json"),
         help="Path to the processing state JSON file.",
     )
     parser.add_argument(

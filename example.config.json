@@ -3,15 +3,15 @@
   "poll_interval": 300,
   "output": {
     "provider": "obsidian",
-    "directory": "/opt/pdf2md-monitor/default-vault/inbox",
-    "asset_directory": "/opt/pdf2md-monitor/default-vault/media",
+    "directory": "/opt/ink2md/default-vault/inbox",
+    "asset_directory": "/opt/ink2md/default-vault/media",
     "obsidian": {
-      "repository_path": "/opt/pdf2md-monitor/default-vault",
+      "repository_path": "/opt/ink2md/default-vault",
       "repository_url": "git@github.com:your-org/obsidian-vault.git",
       "branch": "main",
       "remote": "origin",
-      "private_key_path": "/etc/pdf2md-monitor/ssh/id_ed25519",
-      "known_hosts_path": "/etc/pdf2md-monitor/ssh/known_hosts",
+      "private_key_path": "/etc/ink2md/ssh/id_ed25519",
+      "known_hosts_path": "/etc/ink2md/ssh/known_hosts",
       "media_mode": "pdf",
       "push": true
     }

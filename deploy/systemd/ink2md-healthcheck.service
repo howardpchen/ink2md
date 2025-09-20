@@ -1,5 +1,5 @@
 [Unit]
-Description=Health probe for Cloud Monitor PDF2MD
+Description=Health probe for Ink2MD
 After=${SERVICE_NAME}.service
 
 [Service]

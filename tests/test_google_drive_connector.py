@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from cloud_monitor_pdf2md.connectors.base import CloudDocument
-from cloud_monitor_pdf2md.connectors.google_drive import GoogleDriveConnector
+from ink2md.connectors.base import CloudDocument
+from ink2md.connectors.google_drive import GoogleDriveConnector
 
 
 class _FakeRequest:

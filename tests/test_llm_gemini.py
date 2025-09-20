@@ -9,7 +9,7 @@ import types
 
 import pytest
 
-from cloud_monitor_pdf2md.connectors.base import CloudDocument
+from ink2md.connectors.base import CloudDocument
 
 
 def _install_genai_stub(monkeypatch: pytest.MonkeyPatch):
@@ -82,8 +82,8 @@ def _install_genai_stub(monkeypatch: pytest.MonkeyPatch):
 
 
 def _reload_gemini_module(monkeypatch: pytest.MonkeyPatch):
-    sys.modules.pop("cloud_monitor_pdf2md.llm.gemini", None)
-    module = importlib.import_module("cloud_monitor_pdf2md.llm.gemini")
+    sys.modules.pop("ink2md.llm.gemini", None)
+    module = importlib.import_module("ink2md.llm.gemini")
     return module
 
 
