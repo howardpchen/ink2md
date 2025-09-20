@@ -122,7 +122,10 @@ class PDFProcessor:
 
 
 def build_connector(
-    config: AppConfig, *, force_console_oauth: bool = False
+    config: AppConfig,
+    *,
+    force_console_oauth: bool = False,
+    force_token_refresh: bool = False,
 ) -> CloudConnector:
     if config.provider == "google_drive":
         if not config.google_drive:
@@ -140,6 +143,13 @@ def build_connector(
             credentials = Credentials.from_authorized_user_file(
                 str(token_path), list(gd_config.scopes)
             )
+
+        if force_token_refresh and token_path.exists():
+            try:
+                token_path.unlink()
+            except OSError:
+                LOGGER.warning("Unable to remove existing token cache at %s", token_path)
+            credentials = None
 
         if not credentials or not credentials.valid:
             if credentials and credentials.expired and credentials.refresh_token:
@@ -262,9 +272,16 @@ def build_output_handler(config: AppConfig) -> MarkdownOutputHandler:
 
 
 def build_processor(
-    config: AppConfig, *, force_console_oauth: bool = False
+    config: AppConfig,
+    *,
+    force_console_oauth: bool = False,
+    force_token_refresh: bool = False,
 ) -> PDFProcessor:
-    connector = build_connector(config, force_console_oauth=force_console_oauth)
+    connector = build_connector(
+        config,
+        force_console_oauth=force_console_oauth,
+        force_token_refresh=force_token_refresh,
+    )
     llm_client = build_llm_client(config)
     state = ProcessingState(config.state.path)
     output_handler = build_output_handler(config)

@@ -325,6 +325,11 @@ def test_build_connector_oauth_manual_flow_allows_pasted_url(
         def to_json(self) -> str:
             return self._token_json
 
+        @classmethod
+        def from_authorized_user_file(cls, filename: str, scopes: list[str]):
+            data = json.loads(Path(filename).read_text(encoding="utf-8"))
+            return cls(token_json=json.dumps(data))
+
     class DummyInstalledAppFlow:
         from_file_calls: list[tuple[str, tuple[str, ...]]] = []
         run_calls = 0
@@ -380,14 +385,18 @@ def test_build_connector_oauth_manual_flow_allows_pasted_url(
         "oauth_token_file": str(tmp_path / "token.json"),
     }
 
+    token_file = tmp_path / "token.json"
+    token_file.write_text("{\"token\": \"old\"}", encoding="utf-8")
+
     connector = build_connector(
-        AppConfig.from_dict(config_dict), force_console_oauth=True
+        AppConfig.from_dict(config_dict),
+        force_console_oauth=True,
+        force_token_refresh=True,
     )
 
     assert isinstance(connector, GoogleDriveConnector)
     assert DummyInstalledAppFlow.run_calls == 0
     assert DummyInstalledAppFlow.fetch_codes == ["manual-code"]
-    token_file = tmp_path / "token.json"
     assert token_file.exists()
     assert token_file.read_text(encoding="utf-8") == "{\"token\": \"flow\"}"
 
