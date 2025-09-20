@@ -449,6 +449,10 @@ ensure_ssh_credentials() {
   chown "$SERVICE_USER":"$SERVICE_GROUP" "$PRIVATE_KEY_PATH" "$PUBLIC_KEY_PATH" >/dev/null 2>&1 || true
   chmod 600 "$PRIVATE_KEY_PATH" || true
   chmod 644 "$PUBLIC_KEY_PATH" || true
+  if [[ ! -f "$KNOWN_HOSTS_PATH" ]]; then
+    install -D -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 640 /dev/null "$KNOWN_HOSTS_PATH"
+  fi
+  chmod 640 "$KNOWN_HOSTS_PATH" || true
   add_post_install_note "Add the deploy key from ${PUBLIC_KEY_PATH} to your Obsidian Git provider."
 }
 
@@ -481,7 +485,15 @@ clone_obsidian_repository() {
   local destination_basename
   destination_basename=$(basename "$CLOUD_VAULT_DIR")
   echo "Cloning Obsidian repository from $repo_url into $CLOUD_VAULT_DIR"
-  if ! runuser -u "$SERVICE_USER" -- bash -lc "cd \"$INSTALL_PREFIX\" && git clone \"$repo_url\" \"$destination_basename\""; then
+  local ssh_command
+  printf -v ssh_command 'ssh -i %q -o StrictHostKeyChecking=yes' "$PRIVATE_KEY_PATH"
+  if [[ -f "$KNOWN_HOSTS_PATH" ]]; then
+    printf -v ssh_command '%s -o UserKnownHostsFile=%q' "$ssh_command" "$KNOWN_HOSTS_PATH"
+  fi
+  local clone_cmd
+  printf -v clone_cmd 'cd %q && GIT_SSH_COMMAND=%q git clone %q %q' \
+    "$INSTALL_PREFIX" "$ssh_command" "$repo_url" "$destination_basename"
+  if ! runuser -u "$SERVICE_USER" -- bash -lc "$clone_cmd"; then
     add_post_install_note "Failed to clone $repo_url into ${CLOUD_VAULT_DIR}; initialize the vault manually."
   fi
 }
@@ -710,10 +722,10 @@ main() {
   sync_repository
   setup_virtualenv
   ensure_config_and_env
-  clone_obsidian_repository
-  ensure_vault_directories
   ensure_ssh_credentials
   seed_known_hosts
+  clone_obsidian_repository
+  ensure_vault_directories
   configure_git_identity
   ensure_state_file
   install_systemd_units
