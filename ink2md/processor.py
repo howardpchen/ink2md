@@ -141,6 +141,10 @@ def build_connector(config: AppConfig) -> CloudConnector:
                         "Authorize access by visiting:\n%s\n",
                         authorization_url,
                     )
+                    LOGGER.info(
+                        "After approving the request, return to this terminal and paste "
+                        "either the verification code or the final redirected URL."
+                    )
                     while True:
                         user_input = input(
                             "Paste the verification code or redirected URL from Google: "
