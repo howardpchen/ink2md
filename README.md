@@ -117,7 +117,7 @@ extraction and the Gemini integration:
 ```
 
 - `provider: "simple"` is the default and uses `pypdf` for basic text
-  extraction.
+  extraction.  Also helpful for testing during installation.
 - `provider: "gemini"` uploads the original PDF to Gemini 2.5 Flash and returns
   a consolidated Markdown response that preserves handwriting and images. Set
   `GEMINI_API_KEY` in your environment before starting the processor.
