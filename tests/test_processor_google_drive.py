@@ -13,6 +13,7 @@ from ink2md.config import AppConfig
 from ink2md.connectors.google_drive import GoogleDriveConnector
 from ink2md.processor import build_connector
 from ink2md.processor import build_llm_client
+from ink2md.processor import _extract_code_from_user_input
 
 
 def _base_app_config(tmp_path: Path) -> dict:
@@ -324,3 +325,20 @@ def test_build_llm_client_gemini(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     assert created_kwargs["model"] == "models/gemini-2.5-flash"
     assert created_kwargs["prompt"] == "Summarize"
     assert created_kwargs["temperature"] == 0.15
+
+
+def test_extract_code_from_direct_input() -> None:
+    assert _extract_code_from_user_input("verification-code") == "verification-code"
+
+
+def test_extract_code_from_redirect_url() -> None:
+    url = (
+        "https://localhost/oauth2callback?state=abc123&code=auth-code-xyz&scope="
+        "https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.readonly"
+    )
+    assert _extract_code_from_user_input(url) == "auth-code-xyz"
+
+
+def test_extract_code_from_invalid_redirect_url() -> None:
+    with pytest.raises(ValueError):
+        _extract_code_from_user_input("https://localhost/oauth2callback?state=missing")

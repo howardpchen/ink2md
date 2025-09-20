@@ -91,10 +91,12 @@ enable the Drive API, and generate OAuth client credentials of type "Desktop
 App." Download the resulting JSON secrets file and point
 `google_drive.oauth_client_secrets_file` at its location. On the first run the
 processor will open a local webserver and browser window to complete the OAuth
-consent flow. After you approve the requested scopes (the default is the
-read-only Drive scope), the connector saves the resulting refreshable token to
-`google_drive.oauth_token_file`. Subsequent runs reuse and transparently refresh
-the token so you do not need to reauthorize.
+consent flow. In a headless session copy the printed authorization URL into a
+browser, approve the requested scopes (the default is the read-only Drive scope),
+and paste either the verification code or the full redirected URL back into the
+running process. The connector extracts the authorization code, saves the
+refreshable token to `google_drive.oauth_token_file`, and subsequent runs reuse
+and transparently refresh that token so you do not need to reauthorize.
 
 ### Choosing an LLM provider
 

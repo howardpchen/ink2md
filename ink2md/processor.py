@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-import time
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 
 from .config import AppConfig
 from .connectors.base import CloudConnector
@@ -23,6 +24,26 @@ from .output import (
 from .state import ProcessingState
 
 LOGGER = logging.getLogger("ink2md")
+
+
+def _extract_code_from_user_input(raw_value: str) -> str:
+    """Return the OAuth authorization code from direct input or a pasted URL."""
+
+    value = (raw_value or "").strip()
+    if not value:
+        raise ValueError("Missing authorization input")
+
+    if value.lower().startswith(("http://", "https://")):
+        parsed = urlparse(value)
+        query_params = parse_qs(parsed.query)
+        code_candidates = query_params.get("code") or []
+        if code_candidates:
+            code = code_candidates[0].strip()
+            if code:
+                return code
+        raise ValueError("Redirect URL did not include an authorization code")
+
+    return value
 
 
 @dataclass(slots=True)
@@ -120,8 +141,17 @@ def build_connector(config: AppConfig) -> CloudConnector:
                         "Authorize access by visiting:\n%s\n",
                         authorization_url,
                     )
-                    code = input("Enter the verification code provided by Google: ").strip()
-                    flow.fetch_token(code=code)
+                    while True:
+                        user_input = input(
+                            "Paste the verification code or redirected URL from Google: "
+                        )
+                        try:
+                            code = _extract_code_from_user_input(user_input)
+                        except ValueError as exc:
+                            LOGGER.error("%s. Please try again.", exc)
+                            continue
+                        flow.fetch_token(code=code)
+                        break
                     credentials = flow.credentials
 
             token_path.parent.mkdir(parents=True, exist_ok=True)
