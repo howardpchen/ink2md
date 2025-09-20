@@ -715,7 +715,6 @@ main() {
   ensure_ssh_credentials
   seed_known_hosts
   configure_git_identity
-  add_post_install_note "Clone or initialize the Obsidian repository at ${CLOUD_VAULT_DIR} and configure git user.name/user.email for ${SERVICE_USER}."
   ensure_state_file
   install_systemd_units
   reload_and_enable_units
