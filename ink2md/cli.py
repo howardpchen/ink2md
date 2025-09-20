@@ -42,7 +42,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help=(
             "Force the Google Drive OAuth flow to run in console mode, prompting "
-            "for the verification code or redirected URL even when a browser is available."
+            "for the verification code or redirected URL even when a browser is available "
+            "and delete any cached token so the run acquires a fresh refresh token."
         ),
     )
     return parser.parse_args(argv)
