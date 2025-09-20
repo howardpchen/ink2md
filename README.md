@@ -94,7 +94,9 @@ processor will open a local webserver and browser window to complete the OAuth
 consent flow. In a headless session copy the printed authorization URL into a
 browser, approve the requested scopes (the default is the read-only Drive scope),
 and paste either the verification code or the full redirected URL back into the
-running process. The connector extracts the authorization code, saves the
+running process. If you prefer to always perform the console-based exchange (for
+example when SSH tunneling from a workstation), pass `--headless-secret` on the
+command line. The connector extracts the authorization code, saves the
 refreshable token to `google_drive.oauth_token_file`, and subsequent runs reuse
 and transparently refresh that token so you do not need to reauthorize.
 
@@ -230,10 +232,11 @@ sudo -u ink2md /opt/ink2md/.venv/bin/ink2md \
 Follow the printed OAuth link in a browser, approve the consent screen, and
 wait for the run to finish. When running on a headless host the command will
 print the URL and, after you authorize in a separate browser, prompt for the
-verification code—paste it back into the SSH session to complete the flow. The
-resulting token is saved to
-`/var/lib/ink2md/google_drive_token.json`; subsequent service runs reuse
-it automatically.
+verification code—paste it back into the SSH session to complete the flow. Add
+`--headless-secret` if you want to force this console prompt even when the host
+can launch a browser. The resulting token is saved to
+`/var/lib/ink2md/google_drive_token.json`; subsequent service runs reuse it
+automatically.
 
 The installer also updates `llm.prompt_path` to point at
 `/opt/ink2md/prompts/default_prompt.txt`, and rewrites the Obsidian Git

@@ -37,6 +37,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Enable verbose (debug) logging output.",
     )
+    parser.add_argument(
+        "--headless-secret",
+        action="store_true",
+        help=(
+            "Force the Google Drive OAuth flow to run in console mode, prompting "
+            "for the verification code or redirected URL even when a browser is available."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -44,7 +52,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     configure_logging(args.verbose)
     config = load_config(args.config)
-    processor = build_processor(config)
+    processor = build_processor(
+        config,
+        force_console_oauth=args.headless_secret,
+    )
     if args.once:
         processed = processor.run_once()
         logging.getLogger(__name__).info("Processed %s document(s)", processed)

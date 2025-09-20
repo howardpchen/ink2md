@@ -359,7 +359,8 @@ def test_build_connector_oauth_manual_flow_allows_pasted_url(
 
     _install_oauth_modules(monkeypatch, DummyCredentials, DummyInstalledAppFlow, fake_build)
 
-    for env_var in ("DISPLAY", "WAYLAND_DISPLAY", "BROWSER"):
+    monkeypatch.setenv("DISPLAY", ":0")
+    for env_var in ("WAYLAND_DISPLAY", "BROWSER"):
         monkeypatch.delenv(env_var, raising=False)
 
     client_secrets = tmp_path / "client.json"
@@ -379,9 +380,12 @@ def test_build_connector_oauth_manual_flow_allows_pasted_url(
         "oauth_token_file": str(tmp_path / "token.json"),
     }
 
-    connector = build_connector(AppConfig.from_dict(config_dict))
+    connector = build_connector(
+        AppConfig.from_dict(config_dict), force_console_oauth=True
+    )
 
     assert isinstance(connector, GoogleDriveConnector)
+    assert DummyInstalledAppFlow.run_calls == 0
     assert DummyInstalledAppFlow.fetch_codes == ["manual-code"]
     token_file = tmp_path / "token.json"
     assert token_file.exists()

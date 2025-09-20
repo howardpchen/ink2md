@@ -121,7 +121,9 @@ class PDFProcessor:
             time.sleep(poll_interval)
 
 
-def build_connector(config: AppConfig) -> CloudConnector:
+def build_connector(
+    config: AppConfig, *, force_console_oauth: bool = False
+) -> CloudConnector:
     if config.provider == "google_drive":
         if not config.google_drive:
             raise ValueError("Google Drive configuration missing")
@@ -159,7 +161,7 @@ def build_connector(config: AppConfig) -> CloudConnector:
                     "browser on another machine and complete the consent flow: {url}"
                 )
                 credentials = None
-                use_console_flow = not open_browser
+                use_console_flow = force_console_oauth or not open_browser
                 if not use_console_flow:
                     try:
                         credentials = flow.run_local_server(
@@ -176,7 +178,6 @@ def build_connector(config: AppConfig) -> CloudConnector:
 
                 if use_console_flow:
                     credentials = _complete_console_oauth_flow(flow)
-                    credentials = flow.credentials
 
             token_path.parent.mkdir(parents=True, exist_ok=True)
             token_path.write_text(credentials.to_json(), encoding="utf-8")
@@ -260,8 +261,10 @@ def build_output_handler(config: AppConfig) -> MarkdownOutputHandler:
     )
 
 
-def build_processor(config: AppConfig) -> PDFProcessor:
-    connector = build_connector(config)
+def build_processor(
+    config: AppConfig, *, force_console_oauth: bool = False
+) -> PDFProcessor:
+    connector = build_connector(config, force_console_oauth=force_console_oauth)
     llm_client = build_llm_client(config)
     state = ProcessingState(config.state.path)
     output_handler = build_output_handler(config)
