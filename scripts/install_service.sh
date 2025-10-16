@@ -234,11 +234,17 @@ maybe_stop_service() {
 
 sync_repository() {
   echo "Syncing repository to $INSTALL_PREFIX"
+  local rsync_excludes=()
+  if [[ -f "$INSTALL_PREFIX/prompts/default_prompt.txt" ]]; then
+    rsync_excludes+=("--exclude=prompts/default_prompt.txt")
+  fi
+
   rsync -a --delete \
     --exclude='.git/' \
     --exclude='.venv/' \
     --exclude='__pycache__/' \
     --exclude='.pytest_cache/' \
+    "${rsync_excludes[@]}" \
     --chown="${SERVICE_USER}:${SERVICE_GROUP}" \
     "$REPO_ROOT"/ "$INSTALL_PREFIX"/
 }

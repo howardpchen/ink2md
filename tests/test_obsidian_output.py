@@ -199,6 +199,50 @@ def test_obsidian_handler_inverts_grayscale_when_requested(tmp_path: Path) -> No
         assert minima == maxima
 
 
+def test_obsidian_handler_auto_inverts_dark_png(tmp_path: Path) -> None:
+    pytest.importorskip(
+        "pypdfium2", reason="pypdfium2 is required to render pages into PNG files"
+    )
+    Image = pytest.importorskip("PIL.Image", reason="Pillow is required to generate PNGs")
+
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _init_git_repository(remote)
+    _seed_commit(remote, "README.md")
+
+    vault_path = tmp_path / "vault"
+    handler = ObsidianVaultOutputHandler(
+        repository_path=vault_path,
+        repository_url=str(remote),
+        directory="notes",
+        media_directory="assets",
+        media_mode="png",
+        push=False,
+    )
+    _configure_clone_identity(vault_path)
+
+    buffer = io.BytesIO()
+    Image.new("L", (600, 800), color=0).save(buffer, format="PDF")
+    pdf_bytes = buffer.getvalue()
+
+    timestamp = datetime(2024, 9, 18, 10, 30, tzinfo=timezone.utc)
+    document = CloudDocument(
+        identifier="doc-5",
+        name="Handwriting",
+        modified_at=timestamp,
+    )
+
+    handler.write(document, "# Handwriting\n", pdf_bytes=pdf_bytes)
+
+    image_files = list((vault_path / "assets").glob("*.png"))
+    assert len(image_files) == 1
+
+    with Image.open(image_files[0]) as img:
+        minima, maxima = img.getextrema()
+        assert minima >= 250
+        assert maxima == minima
+
+
 def test_obsidian_handler_rejects_media_invert_for_pdf_mode(tmp_path: Path) -> None:
     remote = tmp_path / "remote"
     remote.mkdir()

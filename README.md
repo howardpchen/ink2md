@@ -69,6 +69,14 @@ You will also need to supply:
   path, branch, and commit settings.
 - An optional prompt file that provides guidance to the downstream Markdown
   generator. A default prompt lives in [`prompts/default_prompt.txt`](prompts/default_prompt.txt).
+  Tip: When you sync results to an Obsidian vault you can point
+  `llm.prompt_path` at a dedicated note in that vault (for example
+  `default-vault/ink2md prompt.md`) so the prompt stays version controlled and
+  can be edited directly from Obsidian instead of logging into the server.
+  This introduces a possible prompt-injection attack surface, so weigh the
+  convenience against the risk and prefer a vetted local prompt file when
+  security is the priority. The trade-off is that the file must keep the same
+  name and location unless you update the configuration.
 - LLM credentials when using a managed provider such as Gemini. Configure the
   `llm` block as described below and supply the API key via environment
   variables or a secrets manager—avoid committing secrets to git.
@@ -247,7 +255,13 @@ The installer also updates `llm.prompt_path` to point at
 settings to use the generated deploy key and known-hosts file under
 `/etc/ink2md/ssh`. If you provide a custom prompt or different Git
 credentials, store them somewhere readable by `ink2md` and adjust the
-config to match.
+config to match. Tip: You can target a note inside the Obsidian vault
+itself—create a page such as `default-vault/ink2md prompt.md`, set
+`llm.prompt_path` to that file, and edit the prompt from Obsidian while keeping
+it version controlled. This convenience opens the door to prompt-injection if
+the note is tampered with, so adopt it only when the risk is acceptable and
+fall back to a vetted local prompt file for the safest posture. Keep the
+filename and path stable or update the configuration whenever you move it.
 
 ### Manual Installation
 

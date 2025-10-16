@@ -114,6 +114,36 @@ def test_gemini_client_generates_markdown(monkeypatch: pytest.MonkeyPatch) -> No
     assert file_part["file_uri"].startswith("uploaded://")
 
 
+def test_gemini_client_falls_back_to_inline_when_rag_store_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stub, config_args, uploads, deleted = _install_genai_stub(monkeypatch)
+
+    def failing_upload(**_kwargs):  # pragma: no cover - exercised in test
+        raise TypeError('Missing required parameter "ragStoreName"')
+
+    stub.upload_file = failing_upload  # type: ignore[attr-defined]
+    module = _reload_gemini_module(monkeypatch)
+
+    client = module.GeminiLLMClient(
+        api_key="key",
+        model="models/gemini-2.5-flash",
+    )
+
+    document = CloudDocument(identifier="doc-inline", name="Inline Doc")
+    markdown = client.convert_pdf(document, pdf_bytes=b"inline-bytes")
+
+    assert markdown == "# Markdown"
+    assert config_args["api_key"] == "key"
+    assert not uploads, "Upload should not persist when fallback is used"
+    assert not deleted, "Inline fallback should not issue delete calls"
+    first_call = client._model.calls[0]
+    assert first_call[0]["text"].startswith("You are a senior technical writer")
+    inline_part = first_call[1]["inline_data"]
+    assert inline_part["mime_type"] == "application/pdf"
+    assert inline_part["data"] == b"inline-bytes"
+
+
 def test_gemini_client_reports_blocked_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
     stub, _config_args, uploads, deleted = _install_genai_stub(monkeypatch)
 

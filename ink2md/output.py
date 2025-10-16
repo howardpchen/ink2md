@@ -528,7 +528,7 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
                     image_path = self._unique_path(
                         self.media_directory, f"{base_stem}-p{index:02d}", suffix
                     )
-                    from PIL import Image, ImageOps  # Lazy import to keep Pillow optional
+                    from PIL import Image, ImageOps, ImageStat  # Lazy import to keep Pillow optional
 
                     pil_image = bitmap.to_pil()
                     lanczos = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
@@ -550,7 +550,7 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
                             image.close()
                             image = resized
 
-                        if self.media_invert:
+                        if self._should_invert_image(image, ImageStat):
                             inverted = ImageOps.invert(image)
                             image.close()
                             image = inverted
@@ -580,6 +580,27 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
         finally:
             pdf.close()
         return images
+
+    def _should_invert_image(self, image, image_stat_module) -> bool:
+        """Return True when the rendered image should be color-inverted."""
+
+        if self.media_mode not in {"png", "jpg"}:
+            return False
+        if self.media_invert:
+            return True
+
+        try:
+            stats = image_stat_module.Stat(image)
+        except Exception:  # pragma: no cover - defensive guard
+            return False
+
+        try:
+            mean_value = float(stats.mean[0]) if stats.mean else 0.0
+        except (IndexError, TypeError, ValueError):  # pragma: no cover - defensive guard
+            return False
+
+        # Invert extremely dark scans to improve handwriting readability.
+        return mean_value < 128.0
 
     def _optimize_png(self, image_path: Path) -> None:
         if self._png_optimizer is None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import logging
 import os
 import tempfile
 from dataclasses import dataclass
@@ -22,6 +23,8 @@ DEFAULT_GEMINI_PROMPT = (
     "You are a senior technical writer who converts PDF documents into clean Markdown. "
     "Preserve structure, summarize key points, and produce a single consolidated output."
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -95,6 +98,14 @@ class GeminiLLMClient(LLMClient):
                 mime_type="application/pdf",
                 display_name=display_name,
             )
+        except Exception as exc:
+            message = str(exc)
+            if "ragStoreName" not in message:
+                raise
+            LOGGER.warning(
+                "Gemini file uploads now require a ragStoreName; falling back to inline payloads."
+            )
+            return _InlineFileHandle(pdf_bytes=pdf_bytes)
         finally:
             try:
                 os.unlink(tmp_path)
@@ -147,6 +158,25 @@ class _UploadedFileHandle:
             genai.delete_file(name)
         except Exception:
             pass
+
+
+class _InlineFileHandle:
+    """Inline payload wrapper used when Gemini uploads are unavailable."""
+
+    def __init__(self, *, pdf_bytes: bytes) -> None:
+        self._part = {
+            "inline_data": {
+                "mime_type": "application/pdf",
+                "data": pdf_bytes,
+            }
+        }
+
+    @property
+    def as_part(self) -> dict:
+        return self._part
+
+    def cleanup(self) -> None:
+        return None
 
 
 __all__ = ["GeminiLLMClient"]
