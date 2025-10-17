@@ -103,12 +103,40 @@ def test_gemini_client_generates_markdown(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert markdown == "# Markdown"
     assert config_args["api_key"] == "test-key"
+    assert client._model.calls, "Model should receive at least one generate_content call"
+    first_call = client._model.calls[0]
+    assert first_call[0]["text"] == "Use markdown."
+    inline_part = first_call[1]["inline_data"]
+    assert inline_part["mime_type"] == "application/pdf"
+    assert inline_part["data"] == b"fake-bytes"
+    assert uploads == []
+    assert deleted == []
+
+
+def test_gemini_client_can_upload_when_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stub, config_args, uploads, deleted = _install_genai_stub(monkeypatch)
+    module = _reload_gemini_module(monkeypatch)
+
+    client = module.GeminiLLMClient(
+        api_key="test-key",
+        model="models/gemini-2.5-flash",
+        prompt="Use markdown.",
+        temperature=0.25,
+        prefer_inline_payloads=False,
+    )
+
+    document = CloudDocument(identifier="doc-1", name="Doc One")
+    markdown = client.convert_pdf(document, pdf_bytes=b"fake-bytes")
+
+    assert markdown == "# Markdown"
+    assert config_args["api_key"] == "test-key"
     assert uploads and uploads[0]["display_name"] == "Doc One"
     assert "path" in uploads[0] and uploads[0]["path"].endswith(".pdf")
     assert deleted == ["files/0"]
     assert client._model.calls, "Model should receive at least one generate_content call"
     first_call = client._model.calls[0]
-    assert first_call[0]["text"] == "Use markdown."
     file_part = first_call[1]["file_data"]
     assert file_part["mime_type"] == "application/pdf"
     assert file_part["file_uri"].startswith("uploaded://")
@@ -128,6 +156,7 @@ def test_gemini_client_falls_back_to_inline_when_rag_store_missing(
     client = module.GeminiLLMClient(
         api_key="key",
         model="models/gemini-2.5-flash",
+        prefer_inline_payloads=False,
     )
 
     document = CloudDocument(identifier="doc-inline", name="Inline Doc")
@@ -158,6 +187,7 @@ def test_gemini_client_reports_blocked_prompt(monkeypatch: pytest.MonkeyPatch) -
     client = module.GeminiLLMClient(
         api_key="key",
         model="models/gemini-2.5-flash",
+        prefer_inline_payloads=False,
     )
 
     document = CloudDocument(identifier="doc-2", name="Doc Two")

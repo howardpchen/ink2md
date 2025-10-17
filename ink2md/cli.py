@@ -8,15 +8,8 @@ import sys
 from pathlib import Path
 
 from .config import load_config
+from .logging_utils import configure_logging
 from .processor import build_processor
-
-
-def configure_logging(verbose: bool) -> None:
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

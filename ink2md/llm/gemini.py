@@ -35,6 +35,7 @@ class GeminiLLMClient(LLMClient):
     model: str
     prompt: Optional[str] = None
     temperature: float = 0.0
+    prefer_inline_payloads: bool = True
 
     def __post_init__(self) -> None:
         if genai is None:  # pragma: no cover - depends on optional dependency
@@ -63,14 +64,14 @@ class GeminiLLMClient(LLMClient):
     ) -> str:
         """Upload the PDF to Gemini and return a consolidated Markdown summary."""
         instructions = (prompt or self.prompt or DEFAULT_GEMINI_PROMPT).strip()
-        uploaded_file = self._upload_pdf(document, pdf_bytes)
+        file_handle = self._prepare_file_handle(document, pdf_bytes)
         try:
-            payload = [{"text": instructions}, uploaded_file.as_part]
+            payload = [{"text": instructions}, file_handle.as_part]
             response = self._model.generate_content(payload)
         except Exception as exc:  # pragma: no cover - dependent on external library
             raise RuntimeError("Gemini API request failed") from exc
         finally:
-            uploaded_file.cleanup()
+            file_handle.cleanup()
         
         feedback = getattr(response, "prompt_feedback", None)
         if feedback and getattr(feedback, "block_reason", None):
@@ -82,6 +83,14 @@ class GeminiLLMClient(LLMClient):
             raise RuntimeError("Gemini did not return any text content.")
         return markdown
         
+    def _prepare_file_handle(
+        self, document: CloudDocument, pdf_bytes: bytes
+    ) -> "_InlineFileHandle | _UploadedFileHandle":
+        """Return the preferred payload handle for Gemini requests."""
+        if self.prefer_inline_payloads:
+            return _InlineFileHandle(pdf_bytes=pdf_bytes)
+        return self._upload_pdf(document, pdf_bytes)
+
     def _upload_pdf(self, document: CloudDocument, pdf_bytes: bytes):
         """Persist the PDF to a temp file and upload it to Gemini's file store."""
         if genai is None:  # pragma: no cover - safety check

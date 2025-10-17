@@ -12,6 +12,7 @@ SERVICE_USER="ink2md"
 SERVICE_GROUP=""
 RETENTION_DAYS="30"
 HEALTHCHECK_MAX_AGE="180"
+LOG_DIR=""
 SKIP_HEALTHCHECK=0
 SKIP_PURGE=0
 RESTART_SERVICE=1
@@ -135,6 +136,7 @@ CONFIG_DIR="${CONFIG_DIR%/}"
 CONFIG_PATH="${CONFIG_PATH%/}"
 ENV_FILE="${ENV_FILE%/}"
 SERVICE_HOME="$STATE_DIR"
+LOG_DIR="${INSTALL_PREFIX}/log"
 STATE_DATA_DIR="${STATE_DIR}/state"
 ASSET_DIR="${OUTPUT_DIR}/media"
 STATE_FILE="${STATE_DATA_DIR}/processed.json"
@@ -208,7 +210,7 @@ ensure_user_properties() {
 
 ensure_directories() {
   local path
-  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$CONFIG_DIR" "$CREDENTIALS_DIR" "$SSH_DIR" /var/tmp/ink2md; do
+  for path in "$INSTALL_PREFIX" "$STATE_DIR" "$STATE_DATA_DIR" "$CONFIG_DIR" "$CREDENTIALS_DIR" "$SSH_DIR" "$LOG_DIR" /var/tmp/ink2md; do
     if [[ -e "$path" && ! -d "$path" ]]; then
       echo "Refusing to use existing non-directory path: $path" >&2
       exit 1
@@ -244,6 +246,7 @@ sync_repository() {
     --exclude='.venv/' \
     --exclude='__pycache__/' \
     --exclude='.pytest_cache/' \
+    --exclude='log/' \
     "${rsync_excludes[@]}" \
     --chown="${SERVICE_USER}:${SERVICE_GROUP}" \
     "$REPO_ROOT"/ "$INSTALL_PREFIX"/
