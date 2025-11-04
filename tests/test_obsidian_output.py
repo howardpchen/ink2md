@@ -41,6 +41,19 @@ def _configure_clone_identity(path: Path) -> None:
     subprocess.run(["git", "config", "user.name", "Vault"], cwd=path, check=True)
 
 
+def _allow_push_into_checked_out_branch(path: Path) -> None:
+    subprocess.run(
+        ["git", "config", "receive.denyCurrentBranch", "updateInstead"],
+        cwd=path,
+        check=True,
+    )
+
+
+def _configure_other_identity(path: Path) -> None:
+    subprocess.run(["git", "config", "user.email", "other@example.com"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Other"], cwd=path, check=True)
+
+
 def test_obsidian_handler_copies_pdf_and_appends_reference(tmp_path: Path) -> None:
     remote = tmp_path / "remote"
     remote.mkdir()
@@ -197,6 +210,92 @@ def test_obsidian_handler_inverts_grayscale_when_requested(tmp_path: Path) -> No
         minima, maxima = img.getextrema()
         assert maxima < 128
         assert minima == maxima
+
+
+def test_obsidian_handler_pulls_before_writing(tmp_path: Path) -> None:
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _init_git_repository(remote)
+    _seed_commit(remote, "README.md")
+    _allow_push_into_checked_out_branch(remote)
+
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", str(remote), str(other)], check=True)
+    _configure_other_identity(other)
+
+    timestamp = datetime(2024, 9, 18, 10, 30, tzinfo=timezone.utc)
+    base_name = "Monthly-Report-20240918103000"
+    other_notes = other / "notes"
+    other_notes.mkdir()
+    conflicting_path = other_notes / f"{base_name}.md"
+    conflicting_path.write_text("remote", encoding="utf-8")
+    subprocess.run(["git", "add", "notes"], cwd=other, check=True)
+    subprocess.run(["git", "commit", "-m", "remote note"], cwd=other, check=True)
+    subprocess.run(["git", "push"], cwd=other, check=True)
+
+    vault_path = tmp_path / "vault"
+    handler = ObsidianVaultOutputHandler(
+        repository_path=vault_path,
+        repository_url=str(remote),
+        directory="notes",
+        media_directory="media",
+        push=True,
+    )
+    _configure_clone_identity(vault_path)
+
+    document = CloudDocument(
+        identifier="doc-5",
+        name="Monthly Report",
+        modified_at=timestamp,
+    )
+    markdown = "# Monthly Report\n"
+    pdf_bytes = b"%PDF-1.4\n%"
+
+    output_path = handler.write(document, markdown, pdf_bytes=pdf_bytes)
+    assert output_path.exists()
+    assert output_path.stem == f"{base_name}-1"
+
+    history = subprocess.run(
+        ["git", "rev-list", "--count", "main"],
+        cwd=remote,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert history == "3"
+
+
+def test_obsidian_handler_raises_when_repository_dirty(tmp_path: Path) -> None:
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _init_git_repository(remote)
+    _seed_commit(remote, "README.md")
+    _allow_push_into_checked_out_branch(remote)
+
+    vault_path = tmp_path / "vault"
+    handler = ObsidianVaultOutputHandler(
+        repository_path=vault_path,
+        repository_url=str(remote),
+        directory="notes",
+        media_directory="media",
+        push=True,
+    )
+    _configure_clone_identity(vault_path)
+
+    readme = vault_path / "README.md"
+    readme.write_text("modified", encoding="utf-8")
+
+    timestamp = datetime(2024, 9, 18, 10, 30, tzinfo=timezone.utc)
+    document = CloudDocument(
+        identifier="doc-6",
+        name="Dirty Repo",
+        modified_at=timestamp,
+    )
+    markdown = "# Dirty\n"
+    pdf_bytes = b"%PDF-1.4\n%"
+
+    with pytest.raises(RuntimeError, match="Local Obsidian repository has uncommitted changes"):
+        handler.write(document, markdown, pdf_bytes=pdf_bytes)
 
 
 def test_obsidian_handler_auto_inverts_dark_png(tmp_path: Path) -> None:

@@ -321,6 +321,9 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
         markdown: str,
         pdf_bytes: bytes | None = None,
     ) -> Path:
+        if self.push:
+            self._refresh_from_remote()
+
         if pdf_bytes is None:
             raise ValueError(
                 "Obsidian output requires the original PDF bytes to manage media files"
@@ -360,22 +363,6 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
                 markdown_path.relative_to(self.repository_path).as_posix()
             ),
         )
-
-        if self.push:
-            pull = self._run_git(
-                "pull",
-                self.remote,
-                self.branch,
-                "--ff-only",
-                check=False,
-            )
-            if pull.returncode != 0:
-                LOGGER.warning(
-                    "Unable to fast-forward branch %s from %s before committing: %s",
-                    self.branch,
-                    self.remote,
-                    pull.stderr.strip() or pull.stdout.strip(),
-                )
 
         self._run_git("commit", "-m", commit_message)
 
@@ -505,6 +492,36 @@ class ObsidianVaultOutputHandler(GitMarkdownOutputHandler):
 
     def _obsidian_path_for(self, path: Path) -> str:
         return path.relative_to(self.repository_path).as_posix()
+
+    def _refresh_from_remote(self) -> None:
+        status = self._run_git(
+            "status",
+            "--porcelain",
+            "--untracked-files=no",
+            check=False,
+        )
+        if status.returncode != 0:
+            message = status.stderr.strip() or status.stdout.strip() or "unknown error"
+            raise RuntimeError(
+                f"Unable to inspect repository status before pulling: {message}"
+            )
+        if status.stdout.strip():
+            raise RuntimeError(
+                "Local Obsidian repository has uncommitted changes; commit or stash them before retrying."
+            )
+
+        pull = self._run_git(
+            "pull",
+            self.remote,
+            self.branch,
+            "--ff-only",
+            check=False,
+        )
+        if pull.returncode != 0:
+            message = pull.stderr.strip() or pull.stdout.strip() or "unknown error"
+            raise RuntimeError(
+                f"Unable to fast-forward branch {self.branch} from {self.remote}: {message}"
+            )
 
     def _render_pdf_to_images(self, pdf_bytes: bytes, base_stem: str) -> list[Path]:
         try:

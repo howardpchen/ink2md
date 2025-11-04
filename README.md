@@ -93,6 +93,11 @@ You will also need to supply:
     are committed to the vault. Generated Markdown and attachments use the same
     `<name>-<timestamp>` naming pattern as filesystem output to simplify
     cross-target automation.
+  - The Obsidian handler pulls from the configured remote before every write.
+    The repository must be clean (no uncommitted edits) or the processor will
+    abort the run so you can resolve the local changes. Ensure the remote branch
+    can be fast-forwarded—if collaborators push conflicting files the handler
+    stops and surfaces the Git error instead of rewriting history.
 
 ### Google Drive OAuth setup
 
@@ -232,6 +237,14 @@ sudo systemctl restart ink2md.service
 
 Use `systemctl status ink2md` or `journalctl -u
 ink2md.service` to confirm the deployment is healthy.
+
+> **Note:** The Obsidian output handler performs a fast-forward pull before each
+> write and aborts if the repository has uncommitted changes. Keep the vault
+> clone clean (commit or discard manual edits) and ensure collaborators push to a
+> remote that the service can fast-forward. If you host the vault on a
+> non-bare repository, configure it to accept fast-forward pushes (for example,
+> `git config receive.denyCurrentBranch updateInstead`) so the service can update
+> the checked-out branch safely.
 
 Authorize Google Drive access once before leaving the service unattended. Run
 

@@ -41,3 +41,10 @@ sudo systemctl enable --now ink2md-purge.timer
 These templates assume the repository is checked out at `/opt/ink2md`
 and that Python lives in `/opt/ink2md/.venv/bin`. Update the paths if you
 choose a different layout.
+
+The Obsidian Git handler fast-forwards the tracked branch before every write and
+raises if the local work tree contains uncommitted files. Make sure the vault
+clone that backs the service stays clean, and configure the remote to accept
+fast-forward pushes. When you push into a non-bare repository (for example, a
+shared filesystem checkout), set `git config receive.denyCurrentBranch updateInstead`
+on that remote so the service can update the checked-out branch safely.
