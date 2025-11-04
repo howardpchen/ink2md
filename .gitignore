@@ -6,8 +6,6 @@ state/
 output/
 credentials/
 config.json
-AGENTS.md
-AGENTS.MD
 
 config.local.json
 log/
