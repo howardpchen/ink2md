@@ -350,11 +350,13 @@ if token_value in {None, "./credentials/client_secret_token.json", "credentials/
     gd_section["oauth_token_file"] = token_path
 
 llm_section = data.setdefault("llm", {})
-prompt_value = llm_section.get("prompt_path")
-default_prompts = {None, "./prompts/markdown.txt", "prompts/markdown.txt"}
-if prompt_value in default_prompts:
-    prompt_path = Path(install_prefix) / "prompts" / "markdown.txt"
-    llm_section["prompt_path"] = str(prompt_path)
+
+markdown_section = data.setdefault("markdown", {})
+markdown_prompt_value = markdown_section.get("prompt_path")
+default_markdown_prompts = {None, "./prompts/markdown.txt", "prompts/markdown.txt"}
+if markdown_prompt_value in default_markdown_prompts:
+    markdown_prompt_path = Path(install_prefix) / "prompts" / "markdown.txt"
+    markdown_section["prompt_path"] = str(markdown_prompt_path)
 
 mindmap_section = data.get("mindmap")
 if isinstance(mindmap_section, dict):

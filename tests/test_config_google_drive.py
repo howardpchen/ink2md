@@ -123,7 +123,7 @@ def test_mindmap_config_parses(tmp_path: Path) -> None:
     config_data["mindmap"] = {
         "prompt_path": str(tmp_path / "mindmap.txt"),
         "keep_local_copy": True,
-        "google_drive_output": {"folder_id": "mindmap-folder"},
+        "google_drive": {"folder_id": "mindmap-folder"},
     }
     client_secrets = tmp_path / "client.json"
     client_secrets.write_text("{}", encoding="utf-8")
@@ -137,5 +137,5 @@ def test_mindmap_config_parses(tmp_path: Path) -> None:
     assert app_config.pipeline == "mindmap"
     assert app_config.mindmap is not None
     assert app_config.mindmap.keep_local_copy is True
-    assert app_config.mindmap.google_drive_output is not None
-    assert app_config.mindmap.google_drive_output.folder_id == "mindmap-folder"
+    assert app_config.mindmap.google_drive is not None
+    assert app_config.mindmap.google_drive.folder_id == "mindmap-folder"

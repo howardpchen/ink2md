@@ -464,7 +464,9 @@ def _build_markdown_processor(
     llm_client = build_llm_client(config)
     state = ProcessingState(config.state.path)
     output_handler = build_output_handler(config, drive_service=drive_service)
-    prompt_text = _load_prompt(config.llm.prompt_path)
+    prompt_text = _load_prompt(config.markdown.prompt_path) or _load_prompt(
+        config.llm.prompt_path
+    )
     return PDFProcessor(
         connector=connector,
         state=state,
@@ -480,9 +482,9 @@ def _build_mindmap_processor(
     force_console_oauth: bool = False,
     force_token_refresh: bool = False,
 ) -> MindmapProcessor:
-    if not config.mindmap or not config.mindmap.google_drive_output:
+    if not config.mindmap or not config.mindmap.google_drive:
         raise ValueError(
-            "Mindmap pipeline requires mindmap.google_drive_output configuration"
+            "Mindmap pipeline requires mindmap.google_drive configuration"
         )
 
     drive_service = _build_google_drive_service(
@@ -502,13 +504,13 @@ def _build_mindmap_processor(
     local_copy_dir = config.markdown.directory if config.mindmap.keep_local_copy else None
     output_handler = GoogleDriveMindmapOutputHandler(
         service=drive_service,
-        folder_id=config.mindmap.google_drive_output.folder_id,
+        folder_id=config.mindmap.google_drive.folder_id,
         keep_local_copy=config.mindmap.keep_local_copy,
         local_directory=local_copy_dir,
     )
 
-    prompt_text = _load_prompt(
-        config.mindmap.prompt_path or config.llm.prompt_path  # type: ignore[arg-type]
+    prompt_text = _load_prompt(config.mindmap.prompt_path) or _load_prompt(
+        config.llm.prompt_path
     )
     return MindmapProcessor(
         connector=connector,
@@ -531,9 +533,9 @@ def _build_agentic_processor(
     force_console_oauth: bool = False,
     force_token_refresh: bool = False,
 ) -> AgenticProcessor:
-    if not config.mindmap or not config.mindmap.google_drive_output:
+    if not config.mindmap or not config.mindmap.google_drive:
         raise ValueError(
-            "Agentic pipeline requires mindmap.google_drive_output configuration"
+            "Agentic pipeline requires mindmap.google_drive configuration"
         )
     drive_service = _build_google_drive_service(
         config,
@@ -553,7 +555,7 @@ def _build_agentic_processor(
     local_copy_dir = config.markdown.directory if config.mindmap.keep_local_copy else None
     mindmap_output = GoogleDriveMindmapOutputHandler(
         service=drive_service,
-        folder_id=config.mindmap.google_drive_output.folder_id,
+        folder_id=config.mindmap.google_drive.folder_id,
         keep_local_copy=config.mindmap.keep_local_copy,
         local_directory=local_copy_dir,
     )
@@ -561,8 +563,12 @@ def _build_agentic_processor(
     orchestration_prompt = _load_prompt(
         (config.agentic and config.agentic.prompt_path) or None
     ) or _load_prompt(config.llm.prompt_path)
-    markdown_prompt = _load_prompt(config.llm.prompt_path)
-    mindmap_prompt = _load_prompt(config.mindmap.prompt_path)
+    markdown_prompt = _load_prompt(config.markdown.prompt_path) or _load_prompt(
+        config.llm.prompt_path
+    )
+    mindmap_prompt = _load_prompt(config.mindmap.prompt_path) or _load_prompt(
+        config.llm.prompt_path
+    )
 
     hashtags = ("mm", "mindmap")
     if config.agentic and config.agentic.hashtags:

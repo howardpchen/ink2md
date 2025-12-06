@@ -79,9 +79,10 @@ You will also need to supply:
   Markdown should be written, and define the `markdown.git` block with repository
   path, branch, and commit settings.
 - An optional prompt file that provides guidance to the downstream Markdown
-  generator. A default prompt lives in [`prompts/markdown.txt`](prompts/markdown.txt).
-  Tip: When you sync results to an Obsidian vault you can point
-  `llm.prompt_path` at a dedicated note in that vault (for example
+  generator. A default prompt lives in [`prompts/markdown.txt`](prompts/markdown.txt)
+  and is referenced via `markdown.prompt_path`. Tip: When you sync results to
+  an Obsidian vault you can point `markdown.prompt_path` at a dedicated note in
+  that vault (for example
   `default-vault/ink2md prompt.md`) so the prompt stays version controlled and
   can be edited directly from Obsidian instead of logging into the server.
   This introduces a possible prompt-injection attack surface, so weigh the
@@ -95,9 +96,10 @@ You will also need to supply:
   the `mindmap` block with an output folder ID and an optional custom prompt.
 - When running the agentic router, set `pipeline` to `"agentic"` and populate
   the `mindmap` and `agentic` blocks; the router uses `agentic.prompt_path`
-  (default `prompts/orchestration.txt`) to decide which agent to invoke. Set
-  `markdown.provider` and `markdown.google_drive.folder_id` for Markdown, and
-  `mindmap.google_drive_output.folder_id` for mindmaps.
+  (default `prompts/orchestration.txt` or falls back to `llm.prompt_path`) to
+  decide which agent to invoke. Set `markdown.provider` and
+  `markdown.google_drive.folder_id` for Markdown, and `mindmap.google_drive.folder_id`
+  for mindmaps.
 - Optional output settings:
   - `markdown.asset_directory` copies the original PDFs alongside the generated
     Markdown using the same timestamp suffix (for example,
@@ -180,7 +182,7 @@ folder, and local copies:
 ```
 
 When `keep_local_copy` is true, generated `.mm` files are also written to
-`markdown.directory`; uploads always target the `mindmap.google_drive_output`
+`markdown.directory`; uploads always target the `mindmap.google_drive`
 folder. The prompt in `prompts/mindmap.txt` asks the LLM to emit deterministic
 JSON (`text`, `children`, optional `link`, `color`, `priority`) before the
 tree is rendered to FreeMind XML.
@@ -201,9 +203,9 @@ agent. Configure both outputs:
 "mindmap": {
   "prompt_path": "./prompts/mindmap.txt",
   "keep_local_copy": true,
-  "google_drive_output": { "folder_id": "YOUR_MINDMAP_OUTPUT_FOLDER_ID" }
+  "google_drive": { "folder_id": "YOUR_MINDMAP_OUTPUT_FOLDER_ID" }
 },
-"output": {
+"markdown": {
   "provider": "google_drive",
   "directory": "./output",            // used when keep_local_copy is true
   "google_drive": {

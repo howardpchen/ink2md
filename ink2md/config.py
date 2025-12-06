@@ -55,7 +55,7 @@ class MindmapConfig:
     """Settings describing the mindmap conversion pipeline."""
 
     prompt_path: Optional[Path] = None
-    google_drive_output: Optional[MindmapGoogleDriveOutputConfig] = None
+    google_drive: Optional[MindmapGoogleDriveOutputConfig] = None
     keep_local_copy: bool = False
 
 
@@ -111,6 +111,7 @@ class MarkdownOutputConfig:
     directory: Path
     asset_directory: Optional[Path] = None
     provider: str = "filesystem"
+    prompt_path: Optional[Path] = None
     git: Optional[GitOutputConfig] = None
     obsidian: Optional["ObsidianOutputConfig"] = None
     google_drive: Optional[GoogleDriveOutputConfig] = None
@@ -177,6 +178,7 @@ class AppConfig:
         asset_dir = cls._coerce_path(
             asset_value, allow_relative=allow_relative
         )
+        markdown_prompt = cls._coerce_path(markdown_data.get("prompt_path"))
 
         git_cfg = None
         if "git" in markdown_data and markdown_data["git"] is not None:
@@ -247,14 +249,13 @@ class AppConfig:
         if output_provider == "google_drive":
             gd_output_data = markdown_data.get("google_drive", {})
             folder_id = gd_output_data.get("folder_id")
-            if not folder_id:
-                raise ValueError(
-                    "markdown.google_drive.folder_id is required when configuring Google Drive output"
+            if folder_id:
+                google_drive_output_cfg = GoogleDriveOutputConfig(
+                    folder_id=str(folder_id),
+                    keep_local_copy=bool(gd_output_data.get("keep_local_copy", False)),
                 )
-            google_drive_output_cfg = GoogleDriveOutputConfig(
-                folder_id=str(folder_id),
-                keep_local_copy=bool(gd_output_data.get("keep_local_copy", False)),
-            )
+            else:
+                google_drive_output_cfg = None
 
         if asset_dir is None and output_provider == "obsidian":
             asset_dir = Path("media")
@@ -263,6 +264,7 @@ class AppConfig:
             directory=output_dir,
             asset_directory=asset_dir,
             provider=output_provider,
+            prompt_path=markdown_prompt,
             git=git_cfg,
             obsidian=obsidian_cfg,
             google_drive=google_drive_output_cfg,
@@ -288,20 +290,17 @@ class AppConfig:
             keep_local_copy = bool(mindmap_data.get("keep_local_copy", False))
 
             gd_output_cfg = None
-            if "google_drive_output" in mindmap_data:
-                gd_output_data = mindmap_data["google_drive_output"] or {}
+            if "google_drive" in mindmap_data:
+                gd_output_data = mindmap_data["google_drive"] or {}
                 folder_id = gd_output_data.get("folder_id")
-                if not folder_id:
-                    raise ValueError(
-                        "mindmap.google_drive_output.folder_id is required when configuring mindmap output"
+                if folder_id:
+                    gd_output_cfg = MindmapGoogleDriveOutputConfig(
+                        folder_id=str(folder_id),
                     )
-                gd_output_cfg = MindmapGoogleDriveOutputConfig(
-                    folder_id=str(folder_id),
-                )
 
             mindmap_cfg = MindmapConfig(
                 prompt_path=mm_prompt,
-                google_drive_output=gd_output_cfg,
+                google_drive=gd_output_cfg,
                 keep_local_copy=keep_local_copy,
             )
 
