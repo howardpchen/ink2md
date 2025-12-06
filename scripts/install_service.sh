@@ -320,8 +320,8 @@ state_section = data.setdefault("state", {})
 if state_section.get("path") in {None, "./state/processed.json"}:
     state_section["path"] = state_file
 
-output_section = data.setdefault("output", {})
-directory_value = output_section.get("directory")
+markdown_section = data.setdefault("markdown", {})
+directory_value = markdown_section.get("directory")
 if directory_value in {
     None,
     "inbox",
@@ -329,16 +329,16 @@ if directory_value in {
     "default-vault/inbox",
     "~/vaults/company-notes",
 }:
-    output_section["directory"] = vault_inbox
+    markdown_section["directory"] = vault_inbox
 
-asset_value = output_section.get("asset_directory")
+asset_value = markdown_section.get("asset_directory")
 if asset_value in {
     None,
     "media",
     "./output/media",
     "default-vault/media",
 }:
-    output_section["asset_directory"] = vault_assets
+    markdown_section["asset_directory"] = vault_assets
 
 gd_section = data.setdefault("google_drive", {})
 client_value = gd_section.get("oauth_client_secrets_file")
@@ -372,8 +372,8 @@ if isinstance(agentic_section, dict):
         ag_prompt_path = Path(install_prefix) / "prompts" / "orchestration.txt"
         agentic_section["prompt_path"] = str(ag_prompt_path)
 
-output_section = data.get("output") or {}
-obsidian_section = output_section.get("obsidian")
+markdown_section = data.get("markdown") or {}
+obsidian_section = markdown_section.get("obsidian")
 if isinstance(obsidian_section, dict):
     repo_path_value = obsidian_section.get("repository_path")
     if repo_path_value in {
@@ -411,11 +411,11 @@ try:
 except json.JSONDecodeError:
     sys.exit(0)
 
-output = data.get("output", {})
-if not isinstance(output, dict):
+markdown_cfg = data.get("markdown", {})
+if not isinstance(markdown_cfg, dict):
     sys.exit(0)
 
-obsidian = output.get("obsidian")
+obsidian = markdown_cfg.get("obsidian")
 if isinstance(obsidian, dict):
     url = obsidian.get("repository_url")
     if isinstance(url, str):
@@ -487,7 +487,7 @@ clone_obsidian_repository() {
     return
   fi
   if [[ "$repo_url" == *"your-org"* || "$repo_url" == *"example"* ]]; then
-    add_post_install_note "Update output.obsidian.repository_url in ${CONFIG_PATH} and rerun cloning for ${CLOUD_VAULT_DIR}."
+  add_post_install_note "Update markdown.obsidian.repository_url in ${CONFIG_PATH} and rerun cloning for ${CLOUD_VAULT_DIR}."
     return
   fi
 
@@ -547,8 +547,8 @@ with open(config_path, "r", encoding="utf-8") as handle:
     data = json.load(handle)
 
 host = ""
-output = data.get("output", {})
-obsidian = output.get("obsidian")
+markdown = data.get("markdown", {})
+obsidian = markdown.get("obsidian") if isinstance(markdown, dict) else None
 if isinstance(obsidian, dict):
     repo_url = obsidian.get("repository_url") or ""
     if repo_url.startswith("ssh://"):

@@ -360,57 +360,57 @@ def build_llm_client(config: AppConfig) -> LLMClient:
 def build_output_handler(
     config: AppConfig, *, drive_service: "Resource | None" = None
 ) -> MarkdownOutputHandler:
-    asset_directory = config.output.asset_directory
+    asset_directory = config.markdown.asset_directory
 
-    if config.output.provider == "git":
-        if not config.output.git:
+    if config.markdown.provider == "git":
+        if not config.markdown.git:
             raise ValueError("Git output requested but git configuration missing")
         return GitMarkdownOutputHandler(
-            repository_path=config.output.git.repository_path,
-            directory=config.output.directory,
-            branch=config.output.git.branch,
-            remote=config.output.git.remote,
-            commit_message_template=config.output.git.commit_message_template,
-            push=config.output.git.push,
+            repository_path=config.markdown.git.repository_path,
+            directory=config.markdown.directory,
+            branch=config.markdown.git.branch,
+            remote=config.markdown.git.remote,
+            commit_message_template=config.markdown.git.commit_message_template,
+            push=config.markdown.git.push,
             asset_directory=asset_directory,
         )
 
-    if config.output.provider == "obsidian":
-        if not config.output.obsidian:
+    if config.markdown.provider == "obsidian":
+        if not config.markdown.obsidian:
             raise ValueError(
                 "Obsidian output requested but obsidian configuration missing"
             )
         media_directory = asset_directory or Path("media")
         return ObsidianVaultOutputHandler(
-            repository_path=config.output.obsidian.repository_path,
-            repository_url=config.output.obsidian.repository_url,
-            directory=config.output.directory,
+            repository_path=config.markdown.obsidian.repository_path,
+            repository_url=config.markdown.obsidian.repository_url,
+            directory=config.markdown.directory,
             media_directory=media_directory,
-            branch=config.output.obsidian.branch,
-            remote=config.output.obsidian.remote,
-            commit_message_template=config.output.obsidian.commit_message_template,
-            media_mode=config.output.obsidian.media_mode,
-            media_invert=config.output.obsidian.media_invert,
-            private_key_path=config.output.obsidian.private_key_path,
-            known_hosts_path=config.output.obsidian.known_hosts_path,
-            push=config.output.obsidian.push,
+            branch=config.markdown.obsidian.branch,
+            remote=config.markdown.obsidian.remote,
+            commit_message_template=config.markdown.obsidian.commit_message_template,
+            media_mode=config.markdown.obsidian.media_mode,
+            media_invert=config.markdown.obsidian.media_invert,
+            private_key_path=config.markdown.obsidian.private_key_path,
+            known_hosts_path=config.markdown.obsidian.known_hosts_path,
+            push=config.markdown.obsidian.push,
         )
 
-    if config.output.provider == "google_drive":
-        if not config.output.google_drive:
+    if config.markdown.provider == "google_drive":
+        if not config.markdown.google_drive:
             raise ValueError(
                 "Google Drive output requested but google_drive configuration missing"
             )
         drive = drive_service or _build_google_drive_service(config)
         return GoogleDriveMarkdownOutputHandler(
             service=drive,
-            folder_id=config.output.google_drive.folder_id,
-            keep_local_copy=config.output.google_drive.keep_local_copy,
-            local_directory=config.output.directory,
+            folder_id=config.markdown.google_drive.folder_id,
+            keep_local_copy=config.markdown.google_drive.keep_local_copy,
+            local_directory=config.markdown.directory,
         )
 
     return MarkdownOutputHandler(
-        config.output.directory, asset_directory=asset_directory
+        config.markdown.directory, asset_directory=asset_directory
     )
 
 
@@ -499,7 +499,7 @@ def _build_mindmap_processor(
     llm_client = build_llm_client(config)
     state = ProcessingState(config.state.path)
 
-    local_copy_dir = config.output.directory if config.mindmap.keep_local_copy else None
+    local_copy_dir = config.markdown.directory if config.mindmap.keep_local_copy else None
     output_handler = GoogleDriveMindmapOutputHandler(
         service=drive_service,
         folder_id=config.mindmap.google_drive_output.folder_id,
@@ -550,7 +550,7 @@ def _build_agentic_processor(
     state = ProcessingState(config.state.path)
 
     markdown_output = build_output_handler(config, drive_service=drive_service)
-    local_copy_dir = config.output.directory if config.mindmap.keep_local_copy else None
+    local_copy_dir = config.markdown.directory if config.mindmap.keep_local_copy else None
     mindmap_output = GoogleDriveMindmapOutputHandler(
         service=drive_service,
         folder_id=config.mindmap.google_drive_output.folder_id,

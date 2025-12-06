@@ -79,18 +79,6 @@ class GitOutputConfig:
 
 
 @dataclass(slots=True)
-class OutputConfig:
-    """Configuration for writing Markdown results."""
-
-    directory: Path
-    asset_directory: Optional[Path] = None
-    provider: str = "filesystem"
-    git: Optional[GitOutputConfig] = None
-    obsidian: Optional["ObsidianOutputConfig"] = None
-    google_drive: Optional["GoogleDriveOutputConfig"] = None
-
-
-@dataclass(slots=True)
 class ObsidianOutputConfig:
     """Settings specific to synchronising with an Obsidian Git repository."""
 
@@ -117,6 +105,18 @@ class GoogleDriveOutputConfig:
 
 
 @dataclass(slots=True)
+class MarkdownOutputConfig:
+    """Configuration for writing Markdown results."""
+
+    directory: Path
+    asset_directory: Optional[Path] = None
+    provider: str = "filesystem"
+    git: Optional[GitOutputConfig] = None
+    obsidian: Optional["ObsidianOutputConfig"] = None
+    google_drive: Optional[GoogleDriveOutputConfig] = None
+
+
+@dataclass(slots=True)
 class StateConfig:
     """Configuration for persisting processing state."""
 
@@ -130,7 +130,7 @@ class AppConfig:
     provider: str
     poll_interval: float
     pipeline: Literal["markdown", "mindmap", "agentic"]
-    output: OutputConfig
+    markdown: MarkdownOutputConfig
     state: StateConfig
     llm: LLMConfig
     google_drive: Optional[GoogleDriveConfig] = None
@@ -165,25 +165,25 @@ class AppConfig:
         if pipeline not in {"markdown", "mindmap", "agentic"}:
             raise ValueError("pipeline must be either 'markdown', 'mindmap', or 'agentic'")
 
-        output_data = data.get("output", {})
-        output_provider = output_data.get("provider", "filesystem")
+        markdown_data = data.get("markdown", {})
+        output_provider = markdown_data.get("provider", "filesystem")
         allow_relative = output_provider in {"git", "obsidian"}
         output_dir = cls._coerce_path(
-            output_data.get("directory"), allow_relative=allow_relative
+            markdown_data.get("directory"), allow_relative=allow_relative
         )
         if output_dir is None:
-            raise ValueError("output.directory must be provided in the configuration")
-        asset_value = output_data.get("asset_directory")
+            raise ValueError("markdown.directory must be provided in the configuration")
+        asset_value = markdown_data.get("asset_directory")
         asset_dir = cls._coerce_path(
             asset_value, allow_relative=allow_relative
         )
 
         git_cfg = None
-        if "git" in output_data and output_data["git"] is not None:
-            git_data = output_data["git"]
+        if "git" in markdown_data and markdown_data["git"] is not None:
+            git_data = markdown_data["git"]
             repository_path = cls._coerce_path(git_data.get("repository_path"))
             if repository_path is None:
-                raise ValueError("output.git.repository_path is required when configuring git output")
+                raise ValueError("markdown.git.repository_path is required when configuring git output")
             git_cfg = GitOutputConfig(
                 repository_path=repository_path,
                 branch=git_data.get("branch", "main"),
@@ -196,18 +196,18 @@ class AppConfig:
 
         obsidian_cfg = None
         if output_provider == "obsidian":
-            obsidian_data = output_data.get("obsidian", {})
+            obsidian_data = markdown_data.get("obsidian", {})
             repository_path = cls._coerce_path(
                 obsidian_data.get("repository_path")
             )
             if repository_path is None:
                 raise ValueError(
-                    "output.obsidian.repository_path is required when configuring Obsidian output"
+                    "markdown.obsidian.repository_path is required when configuring Obsidian output"
                 )
             repository_url = obsidian_data.get("repository_url")
             if not repository_url:
                 raise ValueError(
-                    "output.obsidian.repository_url is required when configuring Obsidian output"
+                    "markdown.obsidian.repository_url is required when configuring Obsidian output"
                 )
             private_key_path = cls._coerce_path(
                 obsidian_data.get("private_key_path")
@@ -220,12 +220,12 @@ class AppConfig:
                 media_mode = "jpg"
             if media_mode not in {"pdf", "png", "jpg"}:
                 raise ValueError(
-                    "output.obsidian.media_mode must be one of 'pdf', 'png', or 'jpg'"
+                    "markdown.obsidian.media_mode must be one of 'pdf', 'png', or 'jpg'"
                 )
             media_invert = bool(obsidian_data.get("media_invert", False))
             if media_invert and media_mode not in {"png", "jpg"}:
                 raise ValueError(
-                    "output.obsidian.media_invert is only supported when media_mode is 'png' or 'jpg'"
+                    "markdown.obsidian.media_invert is only supported when media_mode is 'png' or 'jpg'"
                 )
             obsidian_cfg = ObsidianOutputConfig(
                 repository_path=repository_path,
@@ -245,11 +245,11 @@ class AppConfig:
 
         google_drive_output_cfg = None
         if output_provider == "google_drive":
-            gd_output_data = output_data.get("google_drive", {})
+            gd_output_data = markdown_data.get("google_drive", {})
             folder_id = gd_output_data.get("folder_id")
             if not folder_id:
                 raise ValueError(
-                    "output.google_drive.folder_id is required when configuring Google Drive output"
+                    "markdown.google_drive.folder_id is required when configuring Google Drive output"
                 )
             google_drive_output_cfg = GoogleDriveOutputConfig(
                 folder_id=str(folder_id),
@@ -259,7 +259,7 @@ class AppConfig:
         if asset_dir is None and output_provider == "obsidian":
             asset_dir = Path("media")
 
-        output = OutputConfig(
+        markdown = MarkdownOutputConfig(
             directory=output_dir,
             asset_directory=asset_dir,
             provider=output_provider,
@@ -354,7 +354,7 @@ class AppConfig:
             provider=provider,
             poll_interval=poll_interval,
             pipeline=pipeline,  # type: ignore[arg-type]
-            output=output,
+            markdown=markdown,
             state=state,
             llm=llm,
             google_drive=google_drive_cfg,
@@ -385,7 +385,7 @@ __all__ = [
     "GitOutputConfig",
     "ObsidianOutputConfig",
     "GoogleDriveOutputConfig",
-    "OutputConfig",
+    "MarkdownOutputConfig",
     "StateConfig",
     "MindmapConfig",
     "MindmapGoogleDriveOutputConfig",

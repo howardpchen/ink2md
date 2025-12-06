@@ -2,12 +2,19 @@
   "provider": "google_drive",
   "pipeline": "agentic",
   "poll_interval": 300,
-  "output": {
+  "markdown": {
     "provider": "google_drive",
     "directory": "./output",
     "google_drive": {
       "folder_id": "YOUR_MARKDOWN_OUTPUT_FOLDER_ID",
       "keep_local_copy": true
+    }
+  },
+  "mindmap": {
+    "prompt_path": "./prompts/mindmap.txt",
+    "keep_local_copy": true,
+    "google_drive_output": {
+      "folder_id": "YOUR_MINDMAP_OUTPUT_FOLDER_ID"
     }
   },
   "state": {
@@ -16,13 +23,6 @@
   "llm": {
     "provider": "simple",
     "prompt_path": "./prompts/markdown.txt"
-  },
-  "mindmap": {
-    "prompt_path": "./prompts/mindmap.txt",
-    "keep_local_copy": true,
-    "google_drive_output": {
-      "folder_id": "YOUR_MINDMAP_OUTPUT_FOLDER_ID"
-    }
   },
   "agentic": {
     "prompt_path": "./prompts/orchestration.txt",

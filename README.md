@@ -74,9 +74,9 @@ You will also need to supply:
 - Configuration values describing folder IDs, polling intervals, and local
   output paths. A starter configuration can be found in
   [`example.config.json`](example.config.json).
-- An optional Git repository destination. Configure `output.provider` as
-  `"git"`, set `output.directory` to the folder within the repository where
-  Markdown should be written, and define the `output.git` block with repository
+- An optional Git repository destination. Configure `markdown.provider` as
+  `"git"`, set `markdown.directory` to the folder within the repository where
+  Markdown should be written, and define the `markdown.git` block with repository
   path, branch, and commit settings.
 - An optional prompt file that provides guidance to the downstream Markdown
   generator. A default prompt lives in [`prompts/markdown.txt`](prompts/markdown.txt).
@@ -96,18 +96,18 @@ You will also need to supply:
 - When running the agentic router, set `pipeline` to `"agentic"` and populate
   the `mindmap` and `agentic` blocks; the router uses `agentic.prompt_path`
   (default `prompts/orchestration.txt`) to decide which agent to invoke. Set
-  `output.provider` and `output.google_drive.folder_id` for Markdown, and
+  `markdown.provider` and `markdown.google_drive.folder_id` for Markdown, and
   `mindmap.google_drive_output.folder_id` for mindmaps.
 - Optional output settings:
-  - `output.asset_directory` copies the original PDFs alongside the generated
+  - `markdown.asset_directory` copies the original PDFs alongside the generated
     Markdown using the same timestamp suffix (for example,
     `Report-20240918103000.pdf`).
-  - When targeting an Obsidian vault, adjust `output.obsidian.media_mode` to
+  - When targeting an Obsidian vault, adjust `markdown.obsidian.media_mode` to
     control how page assets are written: keep the default `"pdf"` to link back
     to the source document, or choose `"png"`/`"jpg"` to render 800px-wide,
     8-bit grayscale images (PNG output additionally runs through lossless
     optimizers when available). Combine with the optional
-    `output.obsidian.media_invert` toggle to invert PNG or JPG pages before they
+    `markdown.obsidian.media_invert` toggle to invert PNG or JPG pages before they
     are committed to the vault. Generated Markdown and attachments use the same
     `<name>-<timestamp>` naming pattern as filesystem output to simplify
     cross-target automation.
@@ -180,7 +180,7 @@ folder, and local copies:
 ```
 
 When `keep_local_copy` is true, generated `.mm` files are also written to
-`output.directory`; uploads always target the `mindmap.google_drive_output`
+`markdown.directory`; uploads always target the `mindmap.google_drive_output`
 folder. The prompt in `prompts/mindmap.txt` asks the LLM to emit deterministic
 JSON (`text`, `children`, optional `link`, `color`, `priority`) before the
 tree is rendered to FreeMind XML.

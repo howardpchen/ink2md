@@ -20,7 +20,7 @@ def _base_app_config(tmp_path: Path) -> dict:
     return {
         "provider": "google_drive",
         "poll_interval": 30,
-        "output": {"directory": str(tmp_path / "output")},
+        "markdown": {"directory": str(tmp_path / "output")},
         "state": {"path": str(tmp_path / "state.json")},
         "llm": {"provider": "simple"},
     }
