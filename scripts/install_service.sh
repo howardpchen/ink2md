@@ -237,9 +237,9 @@ maybe_stop_service() {
 sync_repository() {
   echo "Syncing repository to $INSTALL_PREFIX"
   local rsync_excludes=()
-  if [[ -f "$INSTALL_PREFIX/prompts/default_prompt.txt" ]]; then
-    rsync_excludes+=("--exclude=prompts/default_prompt.txt")
-  fi
+if [[ -f "$INSTALL_PREFIX/prompts/markdown.txt" ]]; then
+  rsync_excludes+=("--exclude=prompts/markdown.txt")
+fi
 
   rsync -a --delete \
     --exclude='.git/' \
@@ -351,10 +351,26 @@ if token_value in {None, "./credentials/client_secret_token.json", "credentials/
 
 llm_section = data.setdefault("llm", {})
 prompt_value = llm_section.get("prompt_path")
-default_prompts = {None, "./prompts/default_prompt.txt", "prompts/default_prompt.txt"}
+default_prompts = {None, "./prompts/markdown.txt", "prompts/markdown.txt"}
 if prompt_value in default_prompts:
-    prompt_path = Path(install_prefix) / "prompts" / "default_prompt.txt"
+    prompt_path = Path(install_prefix) / "prompts" / "markdown.txt"
     llm_section["prompt_path"] = str(prompt_path)
+
+mindmap_section = data.get("mindmap")
+if isinstance(mindmap_section, dict):
+    mm_prompt_value = mindmap_section.get("prompt_path")
+    default_mm_prompts = {None, "./prompts/mindmap.txt", "prompts/mindmap.txt"}
+    if mm_prompt_value in default_mm_prompts:
+        mm_prompt_path = Path(install_prefix) / "prompts" / "mindmap.txt"
+        mindmap_section["prompt_path"] = str(mm_prompt_path)
+
+agentic_section = data.get("agentic")
+if isinstance(agentic_section, dict):
+    ag_prompt_value = agentic_section.get("prompt_path")
+    default_ag_prompts = {None, "./prompts/orchestration.txt", "prompts/orchestration.txt"}
+    if ag_prompt_value in default_ag_prompts:
+        ag_prompt_path = Path(install_prefix) / "prompts" / "orchestration.txt"
+        agentic_section["prompt_path"] = str(ag_prompt_path)
 
 output_section = data.get("output") or {}
 obsidian_section = output_section.get("obsidian")

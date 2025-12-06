@@ -44,6 +44,30 @@ class LLMConfig:
 
 
 @dataclass(slots=True)
+class MindmapGoogleDriveOutputConfig:
+    """Settings for uploading generated mindmaps to Google Drive."""
+
+    folder_id: str
+
+
+@dataclass(slots=True)
+class MindmapConfig:
+    """Settings describing the mindmap conversion pipeline."""
+
+    prompt_path: Optional[Path] = None
+    google_drive_output: Optional[MindmapGoogleDriveOutputConfig] = None
+    keep_local_copy: bool = False
+
+
+@dataclass(slots=True)
+class AgenticConfig:
+    """Settings for the orchestration agent that routes documents to pipelines."""
+
+    prompt_path: Optional[Path] = None
+    hashtags: Tuple[str, ...] = ("mm", "mindmap")
+
+
+@dataclass(slots=True)
 class GitOutputConfig:
     """Settings for publishing Markdown changes to a Git repository."""
 
@@ -63,6 +87,7 @@ class OutputConfig:
     provider: str = "filesystem"
     git: Optional[GitOutputConfig] = None
     obsidian: Optional["ObsidianOutputConfig"] = None
+    google_drive: Optional["GoogleDriveOutputConfig"] = None
 
 
 @dataclass(slots=True)
@@ -84,6 +109,14 @@ class ObsidianOutputConfig:
 
 
 @dataclass(slots=True)
+class GoogleDriveOutputConfig:
+    """Settings to upload Markdown outputs directly to Google Drive."""
+
+    folder_id: str
+    keep_local_copy: bool = False
+
+
+@dataclass(slots=True)
 class StateConfig:
     """Configuration for persisting processing state."""
 
@@ -96,11 +129,14 @@ class AppConfig:
 
     provider: str
     poll_interval: float
+    pipeline: Literal["markdown", "mindmap", "agentic"]
     output: OutputConfig
     state: StateConfig
     llm: LLMConfig
     google_drive: Optional[GoogleDriveConfig] = None
     local: Optional[LocalFolderConfig] = None
+    mindmap: Optional[MindmapConfig] = None
+    agentic: Optional[AgenticConfig] = None
 
     @staticmethod
     def _coerce_path(
@@ -125,6 +161,9 @@ class AppConfig:
     def from_dict(cls, data: Dict[str, Any]) -> "AppConfig":
         provider = data.get("provider", "google_drive")
         poll_interval = float(data.get("poll_interval", 300))
+        pipeline = str(data.get("pipeline", "markdown")).lower()
+        if pipeline not in {"markdown", "mindmap", "agentic"}:
+            raise ValueError("pipeline must be either 'markdown', 'mindmap', or 'agentic'")
 
         output_data = data.get("output", {})
         output_provider = output_data.get("provider", "filesystem")
@@ -204,6 +243,19 @@ class AppConfig:
                 media_invert=media_invert,
             )
 
+        google_drive_output_cfg = None
+        if output_provider == "google_drive":
+            gd_output_data = output_data.get("google_drive", {})
+            folder_id = gd_output_data.get("folder_id")
+            if not folder_id:
+                raise ValueError(
+                    "output.google_drive.folder_id is required when configuring Google Drive output"
+                )
+            google_drive_output_cfg = GoogleDriveOutputConfig(
+                folder_id=str(folder_id),
+                keep_local_copy=bool(gd_output_data.get("keep_local_copy", False)),
+            )
+
         if asset_dir is None and output_provider == "obsidian":
             asset_dir = Path("media")
 
@@ -213,6 +265,7 @@ class AppConfig:
             provider=output_provider,
             git=git_cfg,
             obsidian=obsidian_cfg,
+            google_drive=google_drive_output_cfg,
         )
 
         state_path = cls._coerce_path(data["state"]["path"])
@@ -227,6 +280,38 @@ class AppConfig:
             prompt_path=cls._coerce_path(llm_data.get("prompt_path")),
             temperature=float(llm_data.get("temperature", 0.0)),
         )
+
+        mindmap_cfg = None
+        if "mindmap" in data:
+            mindmap_data = data["mindmap"] or {}
+            mm_prompt = cls._coerce_path(mindmap_data.get("prompt_path"))
+            keep_local_copy = bool(mindmap_data.get("keep_local_copy", False))
+
+            gd_output_cfg = None
+            if "google_drive_output" in mindmap_data:
+                gd_output_data = mindmap_data["google_drive_output"] or {}
+                folder_id = gd_output_data.get("folder_id")
+                if not folder_id:
+                    raise ValueError(
+                        "mindmap.google_drive_output.folder_id is required when configuring mindmap output"
+                    )
+                gd_output_cfg = MindmapGoogleDriveOutputConfig(
+                    folder_id=str(folder_id),
+                )
+
+            mindmap_cfg = MindmapConfig(
+                prompt_path=mm_prompt,
+                google_drive_output=gd_output_cfg,
+                keep_local_copy=keep_local_copy,
+            )
+
+        agentic_cfg = None
+        if "agentic" in data:
+            agentic_data = data["agentic"] or {}
+            ag_prompt = cls._coerce_path(agentic_data.get("prompt_path"))
+            hashtags = agentic_data.get("hashtags", ["mm", "mindmap"])
+            hashtags_tuple = tuple(str(tag).lstrip("#").lower() for tag in hashtags)
+            agentic_cfg = AgenticConfig(prompt_path=ag_prompt, hashtags=hashtags_tuple)
 
         google_drive_cfg = None
         if "google_drive" in data:
@@ -268,11 +353,14 @@ class AppConfig:
         return cls(
             provider=provider,
             poll_interval=poll_interval,
+            pipeline=pipeline,  # type: ignore[arg-type]
             output=output,
             state=state,
             llm=llm,
             google_drive=google_drive_cfg,
             local=local_cfg,
+            mindmap=mindmap_cfg,
+            agentic=agentic_cfg,
         )
 
 
@@ -296,7 +384,11 @@ __all__ = [
     "LocalFolderConfig",
     "GitOutputConfig",
     "ObsidianOutputConfig",
+    "GoogleDriveOutputConfig",
     "OutputConfig",
     "StateConfig",
+    "MindmapConfig",
+    "MindmapGoogleDriveOutputConfig",
+    "AgenticConfig",
     "load_config",
 ]

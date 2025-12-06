@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from ..connectors.base import CloudDocument
+from ..mindmap import Mindmap, MindmapValidationError
 from .base import LLMClient
 
 
@@ -24,6 +25,20 @@ DEFAULT_GEMINI_PROMPT = (
     "Preserve structure, summarize key points, and produce a single consolidated output."
 )
 
+DEFAULT_GEMINI_MINDMAP_PROMPT = (
+    "You convert a PDF of a hand-drawn mindmap into strict JSON representing the tree structure. "
+    "Return ONLY JSON with this shape and nothing else: "
+    '{"root":{"text":"...","children":[{"text":"...","children":[],"link":"...","color":"#RRGGBB","priority":1}]}}. '
+    "Rules: every node must include non-empty 'text'. 'children' must be an array (use [] when none). "
+    "'link' is optional URL string, 'color' optional hex string, 'priority' optional integer. Do not wrap in code fences."
+)
+
+DEFAULT_GEMINI_ORCHESTRATION_PROMPT = (
+    "You are a router that decides if a PDF is a handwritten note (markdown) or a hand-drawn mindmap (mindmap). "
+    "Return ONLY one word: 'markdown' or 'mindmap'. "
+    "If the content shows a central topic with radiating branches/nodes, or explicit hashtags #mm or #mindmap, choose mindmap. "
+    "If it is general handwritten notes, choose markdown."
+)
 LOGGER = logging.getLogger(__name__)
 
 
@@ -82,6 +97,66 @@ class GeminiLLMClient(LLMClient):
         if not markdown:
             raise RuntimeError("Gemini did not return any text content.")
         return markdown
+
+    def extract_mindmap(
+        self,
+        document: CloudDocument,
+        pdf_bytes: bytes,
+        prompt: str | None = None,
+    ) -> Mindmap:
+        instructions = (prompt or self.prompt or DEFAULT_GEMINI_MINDMAP_PROMPT).strip()
+        file_handle = self._prepare_file_handle(document, pdf_bytes)
+        try:
+            payload = [{"text": instructions}, file_handle.as_part]
+            response = self._model.generate_content(payload)
+        except Exception as exc:  # pragma: no cover - dependent on external library
+            raise RuntimeError("Gemini API request failed") from exc
+        finally:
+            file_handle.cleanup()
+
+        feedback = getattr(response, "prompt_feedback", None)
+        if feedback and getattr(feedback, "block_reason", None):
+            reason = getattr(feedback, "block_reason", "unspecified")
+            raise RuntimeError(f"Gemini blocked the request: {reason}")
+
+        raw_text = self._extract_response_text(response)
+        if not raw_text:
+            raise RuntimeError("Gemini did not return any text content.")
+
+        payload_text = _unwrap_code_fences(raw_text).strip()
+        try:
+            return Mindmap.from_json(payload_text)
+        except MindmapValidationError as exc:
+            raise RuntimeError("Gemini returned invalid mindmap JSON") from exc
+
+    def classify_document(
+        self,
+        document: CloudDocument,
+        pdf_bytes: bytes,
+        prompt: str | None = None,
+    ) -> str:
+        instructions = (prompt or self.prompt or DEFAULT_GEMINI_ORCHESTRATION_PROMPT).strip()
+        name = (document.name or "").lower()
+        if "#mm" in name or "#mindmap" in name:
+            return "mindmap"
+        file_handle = self._prepare_file_handle(document, pdf_bytes)
+        try:
+            payload = [{"text": instructions}, file_handle.as_part]
+            response = self._model.generate_content(payload)
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError("Gemini API request failed") from exc
+        finally:
+            file_handle.cleanup()
+
+        feedback = getattr(response, "prompt_feedback", None)
+        if feedback and getattr(feedback, "block_reason", None):
+            reason = getattr(feedback, "block_reason", "unspecified")
+            raise RuntimeError(f"Gemini blocked the request: {reason}")
+
+        decision = _unwrap_code_fences(self._extract_response_text(response)).strip().lower()
+        if "mindmap" in decision:
+            return "mindmap"
+        return "markdown"
         
     def _prepare_file_handle(
         self, document: CloudDocument, pdf_bytes: bytes
@@ -186,6 +261,16 @@ class _InlineFileHandle:
 
     def cleanup(self) -> None:
         return None
+
+
+def _unwrap_code_fences(value: str) -> str:
+    trimmed = value.strip()
+    if not trimmed.startswith("```"):
+        return trimmed
+    lines = trimmed.splitlines()
+    if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
+        return "\n".join(lines[1:-1]).strip()
+    return trimmed
 
 
 __all__ = ["GeminiLLMClient"]

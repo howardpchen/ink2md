@@ -48,3 +48,8 @@ clone that backs the service stays clean, and configure the remote to accept
 fast-forward pushes. When you push into a non-bare repository (for example, a
 shared filesystem checkout), set `git config receive.denyCurrentBranch updateInstead`
 on that remote so the service can update the checked-out branch safely.
+
+If you run the agentic pipeline, configure `output.google_drive.folder_id` for
+Markdown and `mindmap.google_drive_output.folder_id` for FreeMind exports. Set
+`keep_local_copy` flags if you want local Markdown or `.mm` copies alongside the
+uploads; `output.directory` controls where those local copies land.

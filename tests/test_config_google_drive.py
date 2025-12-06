@@ -99,6 +99,7 @@ def test_llm_api_key_expands_environment(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     config_data = {
         "provider": "local",
+        "pipeline": "mindmap",
         "poll_interval": 5,
         "output": {"directory": str(tmp_path / "output")},
         "state": {"path": str(tmp_path / "state.json")},
@@ -114,3 +115,27 @@ def test_llm_api_key_expands_environment(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     assert app_config.llm.api_key == "super-secret"
     assert app_config.llm.model == "models/gemini-pro"
+
+
+def test_mindmap_config_parses(tmp_path: Path) -> None:
+    config_data = _base_config_dict(tmp_path)
+    config_data["pipeline"] = "mindmap"
+    config_data["mindmap"] = {
+        "prompt_path": str(tmp_path / "mindmap.txt"),
+        "keep_local_copy": True,
+        "google_drive_output": {"folder_id": "mindmap-folder"},
+    }
+    client_secrets = tmp_path / "client.json"
+    client_secrets.write_text("{}", encoding="utf-8")
+    config_data["google_drive"] = {
+        "folder_id": "input-folder",
+        "oauth_client_secrets_file": str(client_secrets),
+    }
+
+    app_config = AppConfig.from_dict(config_data)
+
+    assert app_config.pipeline == "mindmap"
+    assert app_config.mindmap is not None
+    assert app_config.mindmap.keep_local_copy is True
+    assert app_config.mindmap.google_drive_output is not None
+    assert app_config.mindmap.google_drive_output.folder_id == "mindmap-folder"

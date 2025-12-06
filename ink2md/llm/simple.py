@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ..connectors.base import CloudDocument
+from ..mindmap import Mindmap, MindmapNode
 from .base import LLMClient
 
 
@@ -61,6 +62,34 @@ class SimpleLLMClient(LLMClient):
         if buffer:
             paragraphs.append(" ".join(buffer))
         return paragraphs or ["(The source PDF did not contain extractable text.)"]
+
+    def extract_mindmap(
+        self, document: CloudDocument, pdf_bytes: bytes, prompt: str | None = None
+    ) -> Mindmap:
+        """Produce a simple mindmap tree derived from extracted text."""
+
+        del prompt  # Simple client ignores prompt but keeps signature parity.
+        text = self._extract_text(pdf_bytes)
+        branches = [p for p in self._segment_paragraphs(text) if p]
+        if not branches:
+            branches = ["No extractable content found."]
+
+        children = [MindmapNode(text=branch) for branch in branches]
+        root = MindmapNode(text=document.name or "Mindmap", children=children)
+        return Mindmap(root=root)
+
+    def classify_document(
+        self, document: CloudDocument, pdf_bytes: bytes, prompt: str | None = None
+    ) -> str:
+        """Heuristically route documents; simple client defaults to markdown."""
+
+        name = (document.name or "").lower()
+        if any(tag in name for tag in ("#mm", "#mindmap", " mindmap", " mind map")):
+            return "mindmap"
+        text = self._extract_text(pdf_bytes).lower()
+        if "#mm" in text or "#mindmap" in text:
+            return "mindmap"
+        return "markdown"
 
 
 __all__ = ["SimpleLLMClient"]
