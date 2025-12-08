@@ -8,3 +8,4 @@ Rules:
 - Optional fields: "link" (string URL), "color" (hex color string like "#00FF00"), "priority" (integer).
 - Preserve visible hierarchy; omit speculative content.
 - If a value is unknown, omit the field instead of inventing placeholders.
+- Do NOT wrap the JSON in code fences or add any commentary before/after it.
