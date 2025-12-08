@@ -71,6 +71,28 @@ You will also need to supply:
   `google_drive.oauth_token_file` so the connector can cache the refreshable
   access token. Optional overrides are available for scopes if additional Drive
   permissions are required.
+- If you want to write back to Google Drive (for Markdown or mindmap outputs),
+  include a write scope such as `https://www.googleapis.com/auth/drive.file` in
+  `google_drive.scopes`, delete the cached token, and re-authorize. Example:
+  ```jsonc
+  "google_drive": {
+    "folder_id": "YOUR_INPUT_FOLDER_ID",
+    "oauth_client_secrets_file": "./credentials/client_secret.json",
+    "oauth_token_file": "./credentials/client_secret_token.json",
+    "scopes": ["https://www.googleapis.com/auth/drive.file"]
+  },
+  "markdown": {
+    "provider": "google_drive",
+    "directory": "./output",
+    "google_drive": { "folder_id": "YOUR_MARKDOWN_OUTPUT_FOLDER_ID", "keep_local_copy": true },
+    "prompt_path": "./prompts/markdown.txt"
+  },
+  "mindmap": {
+    "prompt_path": "./prompts/mindmap.txt",
+    "keep_local_copy": true,
+    "google_drive": { "folder_id": "YOUR_MINDMAP_OUTPUT_FOLDER_ID" }
+  }
+  ```
 - Configuration values describing folder IDs, polling intervals, and local
   output paths. A starter configuration can be found in
   [`example.config.json`](example.config.json).
