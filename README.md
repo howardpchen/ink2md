@@ -73,13 +73,19 @@ You will also need to supply:
   permissions are required.
 - If you want to write back to Google Drive (for Markdown or mindmap outputs),
   include a write scope such as `https://www.googleapis.com/auth/drive.file` in
-  `google_drive.scopes`, delete the cached token, and re-authorize. Example:
+  `google_drive.scopes` and delete the cached token before re-authorizing. If
+  you need to read PDFs the app did not create, also include a read scope such
+  as `https://www.googleapis.com/auth/drive.readonly` (or use the full
+  `drive` scope). Example:
   ```jsonc
   "google_drive": {
     "folder_id": "YOUR_INPUT_FOLDER_ID",
     "oauth_client_secrets_file": "./credentials/client_secret.json",
     "oauth_token_file": "./credentials/client_secret_token.json",
-    "scopes": ["https://www.googleapis.com/auth/drive.file"]
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/drive.file"
+    ]
   },
   "markdown": {
     "provider": "google_drive",
