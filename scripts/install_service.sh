@@ -22,6 +22,9 @@ POST_INSTALL_NOTES=()
 GIT_USER_NAME=""
 GIT_USER_EMAIL=""
 OBS_REPOSITORY_URL=""
+OVERWRITE_MARKDOWN_PROMPT=0
+OVERWRITE_MINDMAP_PROMPT=0
+OVERWRITE_ORCHESTRATION_PROMPT=0
 
 add_post_install_note() {
   local note existing
@@ -234,12 +237,45 @@ maybe_stop_service() {
   fi
 }
 
+prompt_overwrite_prompts() {
+  local path
+  path="${INSTALL_PREFIX}/prompts/markdown.txt"
+  if [[ -f "$path" ]]; then
+    read -rp "Overwrite existing prompt at $path with repository default? [y/N]: " reply
+    [[ "$reply" =~ ^[Yy] ]] && OVERWRITE_MARKDOWN_PROMPT=1
+  else
+    OVERWRITE_MARKDOWN_PROMPT=1
+  fi
+
+  path="${INSTALL_PREFIX}/prompts/mindmap.txt"
+  if [[ -f "$path" ]]; then
+    read -rp "Overwrite existing prompt at $path with repository default? [y/N]: " reply
+    [[ "$reply" =~ ^[Yy] ]] && OVERWRITE_MINDMAP_PROMPT=1
+  else
+    OVERWRITE_MINDMAP_PROMPT=1
+  fi
+
+  path="${INSTALL_PREFIX}/prompts/orchestration.txt"
+  if [[ -f "$path" ]]; then
+    read -rp "Overwrite existing prompt at $path with repository default? [y/N]: " reply
+    [[ "$reply" =~ ^[Yy] ]] && OVERWRITE_ORCHESTRATION_PROMPT=1
+  else
+    OVERWRITE_ORCHESTRATION_PROMPT=1
+  fi
+}
+
 sync_repository() {
   echo "Syncing repository to $INSTALL_PREFIX"
   local rsync_excludes=()
-if [[ -f "$INSTALL_PREFIX/prompts/markdown.txt" ]]; then
-  rsync_excludes+=("--exclude=prompts/markdown.txt")
-fi
+  if [[ -f "$INSTALL_PREFIX/prompts/markdown.txt" && "$OVERWRITE_MARKDOWN_PROMPT" -ne 1 ]]; then
+    rsync_excludes+=("--exclude=prompts/markdown.txt")
+  fi
+  if [[ -f "$INSTALL_PREFIX/prompts/mindmap.txt" && "$OVERWRITE_MINDMAP_PROMPT" -ne 1 ]]; then
+    rsync_excludes+=("--exclude=prompts/mindmap.txt")
+  fi
+  if [[ -f "$INSTALL_PREFIX/prompts/orchestration.txt" && "$OVERWRITE_ORCHESTRATION_PROMPT" -ne 1 ]]; then
+    rsync_excludes+=("--exclude=prompts/orchestration.txt")
+  fi
 
   rsync -a --delete \
     --exclude='.git/' \
@@ -745,6 +781,7 @@ reload_and_enable_units() {
 main() {
   create_group_and_user
   ensure_directories
+  prompt_overwrite_prompts
   maybe_stop_service
   sync_repository
   setup_virtualenv
