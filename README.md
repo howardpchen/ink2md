@@ -198,7 +198,7 @@ folder, and local copies:
 "mindmap": {
   "prompt_path": "./prompts/mindmap.txt",
   "keep_local_copy": true,
-  "google_drive_output": {
+  "google_drive": {
     "folder_id": "YOUR_MINDMAP_OUTPUT_FOLDER_ID"
   }
 },
