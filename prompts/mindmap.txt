@@ -6,6 +6,6 @@ Rules:
 - Every node MUST have non-empty "text".
 - "children" MUST be an array (use [] if none).
 - Optional fields: "link" (string URL), "color" (hex color string like "#00FF00"), "priority" (integer).
-- Preserve visible hierarchy; omit speculative content. If drawn content does not fit neatly into a node, attach a short note under the closest/best-fit node’s text.
+- Preserve visible hierarchy; omit speculative content. If drawn content (prose/sentences/notes) sits near a node, OCR it and attach a short note under the closest/best-fit node’s text.
 - If a value is unknown, omit the field instead of inventing placeholders.
 - Do NOT wrap the JSON in code fences or add any commentary before/after it.
