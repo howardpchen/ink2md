@@ -6,7 +6,9 @@ Markdown using a Large Language Model (LLM) vision endpoint. The first target
 integration focuses on Google Drive, with the goal of supporting additional
 providers in the future. The repository now ships with a fully functional
 development pipeline that can monitor either Google Drive (when credentials are
-available) or a local folder for PDFs.
+available) or a local folder for PDFs. The default example configuration uses
+the agentic router, writing Markdown to one Google Drive folder and mindmaps to
+another (with optional local copies for both).
 
 ## Repository Goals
 
@@ -17,8 +19,15 @@ available) or a local folder for PDFs.
 - **Prompt-Driven Conversion** – Submit a reusable conversion prompt that asks
   the LLM to produce publication-quality Markdown from each PDF.
 - **Result Management** – Store the generated Markdown documents in a local
-  destination or commit the results to a Git repository that can be
-  synchronized with tools such as Obsidian.
+  destination, upload them to Google Drive, or commit the results to a Git
+  repository that can be synchronized with tools such as Obsidian. Mindmaps
+  can upload to a separate Google Drive folder.
+- **Mindmap Export (optional)** – Convert hand-drawn mindmaps into
+  FreeMind-compatible `.mm` files and upload them to a designated Google Drive
+  folder, with an optional local copy for debugging.
+- **Agentic Routing (optional)** – An orchestration agent inspects each PDF (and
+  optional hashtags like `#mm`/`#mindmap`) and routes it to either the Markdown
+  or Mindmap agent automatically.
 
 ## Planned Components
 
@@ -38,6 +47,8 @@ The core modules that make up the project include:
    optionally pushing to a remote). Markdown filenames are emitted as
    `<sanitized-title>-<YYYYMMDDHHMMSS>.md`, which keeps chronological ordering
    predictable in Obsidian vaults and similar tools.
+6. **Mindmap Output Handler** – Render a mindmap tree into FreeMind XML and
+   upload it to a target Google Drive folder.
 
 ## Getting Started
 
@@ -60,17 +71,46 @@ You will also need to supply:
   `google_drive.oauth_token_file` so the connector can cache the refreshable
   access token. Optional overrides are available for scopes if additional Drive
   permissions are required.
+- If you want to write back to Google Drive (for Markdown or mindmap outputs),
+  include a write scope such as `https://www.googleapis.com/auth/drive.file` in
+  `google_drive.scopes` and delete the cached token before re-authorizing. If
+  you need to read PDFs the app did not create, also include a read scope such
+  as `https://www.googleapis.com/auth/drive.readonly` (or use the full
+  `drive` scope). Example:
+  ```jsonc
+  "google_drive": {
+    "folder_id": "YOUR_INPUT_FOLDER_ID",
+    "oauth_client_secrets_file": "./credentials/client_secret.json",
+    "oauth_token_file": "./credentials/client_secret_token.json",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/drive.file"
+    ]
+  },
+  "markdown": {
+    "provider": "google_drive",
+    "directory": "./output",
+    "google_drive": { "folder_id": "YOUR_MARKDOWN_OUTPUT_FOLDER_ID", "keep_local_copy": true },
+    "prompt_path": "./prompts/markdown.txt"
+  },
+  "mindmap": {
+    "prompt_path": "./prompts/mindmap.txt",
+    "keep_local_copy": true,
+    "google_drive": { "folder_id": "YOUR_MINDMAP_OUTPUT_FOLDER_ID" }
+  }
+  ```
 - Configuration values describing folder IDs, polling intervals, and local
   output paths. A starter configuration can be found in
   [`example.config.json`](example.config.json).
-- An optional Git repository destination. Configure `output.provider` as
-  `"git"`, set `output.directory` to the folder within the repository where
-  Markdown should be written, and define the `output.git` block with repository
+- An optional Git repository destination. Configure `markdown.provider` as
+  `"git"`, set `markdown.directory` to the folder within the repository where
+  Markdown should be written, and define the `markdown.git` block with repository
   path, branch, and commit settings.
 - An optional prompt file that provides guidance to the downstream Markdown
-  generator. A default prompt lives in [`prompts/default_prompt.txt`](prompts/default_prompt.txt).
-  Tip: When you sync results to an Obsidian vault you can point
-  `llm.prompt_path` at a dedicated note in that vault (for example
+  generator. A default prompt lives in [`prompts/markdown.txt`](prompts/markdown.txt)
+  and is referenced via `markdown.prompt_path`. Tip: When you sync results to
+  an Obsidian vault you can point `markdown.prompt_path` at a dedicated note in
+  that vault (for example
   `default-vault/ink2md prompt.md`) so the prompt stays version controlled and
   can be edited directly from Obsidian instead of logging into the server.
   This introduces a possible prompt-injection attack surface, so weigh the
@@ -80,16 +120,24 @@ You will also need to supply:
 - LLM credentials when using a managed provider such as Gemini. Configure the
   `llm` block as described below and supply the API key via environment
   variables or a secrets manager—avoid committing secrets to git.
+- When running the mindmap pipeline, set `pipeline` to `"mindmap"` and populate
+  the `mindmap` block with an output folder ID and an optional custom prompt.
+- When running the agentic router, set `pipeline` to `"agentic"` and populate
+  the `mindmap` and `agentic` blocks; the router uses `agentic.prompt_path`
+  (default `prompts/orchestration.txt` or falls back to `llm.prompt_path`) to
+  decide which agent to invoke. Set `markdown.provider` and
+  `markdown.google_drive.folder_id` for Markdown, and `mindmap.google_drive.folder_id`
+  for mindmaps.
 - Optional output settings:
-  - `output.asset_directory` copies the original PDFs alongside the generated
+  - `markdown.asset_directory` copies the original PDFs alongside the generated
     Markdown using the same timestamp suffix (for example,
     `Report-20240918103000.pdf`).
-  - When targeting an Obsidian vault, adjust `output.obsidian.media_mode` to
+  - When targeting an Obsidian vault, adjust `markdown.obsidian.media_mode` to
     control how page assets are written: keep the default `"pdf"` to link back
     to the source document, or choose `"png"`/`"jpg"` to render 800px-wide,
     8-bit grayscale images (PNG output additionally runs through lossless
     optimizers when available). Combine with the optional
-    `output.obsidian.media_invert` toggle to invert PNG or JPG pages before they
+    `markdown.obsidian.media_invert` toggle to invert PNG or JPG pages before they
     are committed to the vault. Generated Markdown and attachments use the same
     `<name>-<timestamp>` naming pattern as filesystem output to simplify
     cross-target automation.
@@ -126,7 +174,7 @@ extraction and the Gemini integration:
   "provider": "gemini",
   "model": "models/gemini-2.5-flash",
   "api_key": "${GEMINI_API_KEY}",
-  "prompt_path": "./prompts/default_prompt.txt",
+  "prompt_path": "./prompts/markdown.txt",
   "temperature": 0.0
 }
 ```
@@ -138,6 +186,65 @@ extraction and the Gemini integration:
   `GEMINI_API_KEY` in your environment before starting the processor.
 - `prompt_path` is optional; when present the file contents are appended to the
   system instructions sent to the LLM.
+
+### Mindmap pipeline (handwriting → FreeMind)
+
+Switch to the mindmap pipeline by setting `"pipeline": "mindmap"` in your
+configuration. Use the `mindmap` block to control the prompt, destination
+folder, and local copies:
+
+```jsonc
+"pipeline": "mindmap",
+"mindmap": {
+  "prompt_path": "./prompts/mindmap.txt",
+  "keep_local_copy": true,
+  "google_drive": {
+    "folder_id": "YOUR_MINDMAP_OUTPUT_FOLDER_ID"
+  }
+},
+"google_drive": {
+  "folder_id": "YOUR_INPUT_FOLDER_ID",
+  "oauth_client_secrets_file": "./credentials/client_secret.json",
+  "scopes": ["https://www.googleapis.com/auth/drive.readonly"]
+}
+```
+
+When `keep_local_copy` is true, generated `.mm` files are also written to
+`markdown.directory`; uploads always target the `mindmap.google_drive`
+folder. The prompt in `prompts/mindmap.txt` asks the LLM to emit deterministic
+JSON (`text`, `children`, optional `link`, `color`, `priority`) before the
+tree is rendered to FreeMind XML.
+
+### Agentic routing (mixed inbox)
+
+Set `"pipeline": "agentic"` to let the orchestration agent decide per document.
+It will route to the mindmap agent when the PDF looks like a mindmap or
+contains hashtags like `#mm` / `#mindmap`, otherwise it uses the Markdown
+agent. Configure both outputs:
+
+```jsonc
+"pipeline": "agentic",
+"agentic": {
+  "prompt_path": "./prompts/orchestration.txt",
+  "hashtags": ["mm", "mindmap"]
+},
+"mindmap": {
+  "prompt_path": "./prompts/mindmap.txt",
+  "keep_local_copy": true,
+  "google_drive": { "folder_id": "YOUR_MINDMAP_OUTPUT_FOLDER_ID" }
+},
+"markdown": {
+  "provider": "google_drive",
+  "directory": "./output",            // used when keep_local_copy is true
+  "google_drive": {
+    "folder_id": "YOUR_MARKDOWN_OUTPUT_FOLDER_ID",
+    "keep_local_copy": true
+  }
+},
+"google_drive": { "folder_id": "YOUR_INPUT_FOLDER_ID", ... }
+```
+
+Use hashtags in the PDF filename to force mindmap routing when needed.
 
 ### Using the example configuration
 
@@ -264,7 +371,7 @@ browser. The resulting token is saved to
 automatically.
 
 The installer also updates `llm.prompt_path` to point at
-`/opt/ink2md/prompts/default_prompt.txt`, and rewrites the Obsidian Git
+`/opt/ink2md/prompts/markdown.txt`, and rewrites the Obsidian Git
 settings to use the generated deploy key and known-hosts file under
 `/etc/ink2md/ssh`. If you provide a custom prompt or different Git
 credentials, store them somewhere readable by `ink2md` and adjust the

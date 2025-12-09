@@ -8,6 +8,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 from datetime import datetime as dt_module, timezone
 from pathlib import Path
 from typing import Iterable, Optional
@@ -81,6 +82,84 @@ class MarkdownOutputHandler:
         pdf_path = self.asset_directory / f"{basename}.pdf"
         pdf_path.write_bytes(pdf_bytes)
         return pdf_path
+
+
+class GoogleDriveMarkdownOutputHandler(MarkdownOutputHandler):
+    """Upload Markdown files to a Google Drive folder, with optional local copies."""
+
+    def __init__(
+        self,
+        service: "Resource",
+        folder_id: str,
+        *,
+        keep_local_copy: bool = False,
+        local_directory: str | Path | None = None,
+    ) -> None:
+        if not folder_id:
+            raise ValueError("A target folder_id is required for Google Drive output")
+        self._service = service
+        self._folder_id = folder_id
+        self._keep_local_copy = bool(keep_local_copy)
+        self._local_directory = (
+            Path(local_directory).expanduser().resolve() if local_directory else None
+        )
+        if self._keep_local_copy and self._local_directory:
+            self._local_directory.mkdir(parents=True, exist_ok=True)
+        super().__init__(directory=self._local_directory or Path(tempfile.gettempdir()))
+
+    def write(
+        self,
+        document: CloudDocument,
+        markdown: str,
+        *,
+        pdf_bytes: bytes | None = None,
+        basename: str | None = None,
+    ) -> Path:
+        if basename is None:
+            basename = self._build_basename(document)
+        filename = f"{basename}.md"
+
+        tmp_path = self._write_temp_file(markdown)
+        local_path: Optional[Path] = None
+        try:
+            self._upload_to_drive(filename, tmp_path)
+        finally:
+            if self._keep_local_copy and self._local_directory:
+                local_path = self._local_directory / filename
+                local_path.write_text(markdown, encoding="utf-8")
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
+        return local_path or tmp_path
+
+    def _upload_to_drive(self, filename: str, tmp_path: Path) -> None:
+        from googleapiclient.http import MediaFileUpload  # type: ignore
+
+        media = MediaFileUpload(
+            str(tmp_path), mimetype="text/markdown", resumable=False
+        )
+        metadata = {
+            "name": filename,
+            "parents": [self._folder_id],
+            "mimeType": "text/markdown",
+        }
+        (
+            self._service.files()
+            .create(
+                body=metadata,
+                media_body=media,
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+
+    @staticmethod
+    def _write_temp_file(contents: str) -> Path:
+        with tempfile.NamedTemporaryFile(suffix=".md", delete=False) as handle:
+            handle.write(contents.encode("utf-8"))
+            return Path(handle.name)
 
 
 class GitMarkdownOutputHandler(MarkdownOutputHandler):

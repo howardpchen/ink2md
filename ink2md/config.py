@@ -44,6 +44,30 @@ class LLMConfig:
 
 
 @dataclass(slots=True)
+class MindmapGoogleDriveOutputConfig:
+    """Settings for uploading generated mindmaps to Google Drive."""
+
+    folder_id: str
+
+
+@dataclass(slots=True)
+class MindmapConfig:
+    """Settings describing the mindmap conversion pipeline."""
+
+    prompt_path: Optional[Path] = None
+    google_drive: Optional[MindmapGoogleDriveOutputConfig] = None
+    keep_local_copy: bool = False
+
+
+@dataclass(slots=True)
+class AgenticConfig:
+    """Settings for the orchestration agent that routes documents to pipelines."""
+
+    prompt_path: Optional[Path] = None
+    hashtags: Tuple[str, ...] = ("mm", "mindmap")
+
+
+@dataclass(slots=True)
 class GitOutputConfig:
     """Settings for publishing Markdown changes to a Git repository."""
 
@@ -52,17 +76,6 @@ class GitOutputConfig:
     remote: str = "origin"
     commit_message_template: str = "Add {document_name}"
     push: bool = False
-
-
-@dataclass(slots=True)
-class OutputConfig:
-    """Configuration for writing Markdown results."""
-
-    directory: Path
-    asset_directory: Optional[Path] = None
-    provider: str = "filesystem"
-    git: Optional[GitOutputConfig] = None
-    obsidian: Optional["ObsidianOutputConfig"] = None
 
 
 @dataclass(slots=True)
@@ -84,6 +97,27 @@ class ObsidianOutputConfig:
 
 
 @dataclass(slots=True)
+class GoogleDriveOutputConfig:
+    """Settings to upload Markdown outputs directly to Google Drive."""
+
+    folder_id: str
+    keep_local_copy: bool = False
+
+
+@dataclass(slots=True)
+class MarkdownOutputConfig:
+    """Configuration for writing Markdown results."""
+
+    directory: Path
+    asset_directory: Optional[Path] = None
+    provider: str = "filesystem"
+    prompt_path: Optional[Path] = None
+    git: Optional[GitOutputConfig] = None
+    obsidian: Optional["ObsidianOutputConfig"] = None
+    google_drive: Optional[GoogleDriveOutputConfig] = None
+
+
+@dataclass(slots=True)
 class StateConfig:
     """Configuration for persisting processing state."""
 
@@ -96,11 +130,14 @@ class AppConfig:
 
     provider: str
     poll_interval: float
-    output: OutputConfig
+    pipeline: Literal["markdown", "mindmap", "agentic"]
+    markdown: MarkdownOutputConfig
     state: StateConfig
     llm: LLMConfig
     google_drive: Optional[GoogleDriveConfig] = None
     local: Optional[LocalFolderConfig] = None
+    mindmap: Optional[MindmapConfig] = None
+    agentic: Optional[AgenticConfig] = None
 
     @staticmethod
     def _coerce_path(
@@ -125,26 +162,30 @@ class AppConfig:
     def from_dict(cls, data: Dict[str, Any]) -> "AppConfig":
         provider = data.get("provider", "google_drive")
         poll_interval = float(data.get("poll_interval", 300))
+        pipeline = str(data.get("pipeline", "markdown")).lower()
+        if pipeline not in {"markdown", "mindmap", "agentic"}:
+            raise ValueError("pipeline must be either 'markdown', 'mindmap', or 'agentic'")
 
-        output_data = data.get("output", {})
-        output_provider = output_data.get("provider", "filesystem")
+        markdown_data = data.get("markdown", {})
+        output_provider = markdown_data.get("provider", "filesystem")
         allow_relative = output_provider in {"git", "obsidian"}
         output_dir = cls._coerce_path(
-            output_data.get("directory"), allow_relative=allow_relative
+            markdown_data.get("directory"), allow_relative=allow_relative
         )
         if output_dir is None:
-            raise ValueError("output.directory must be provided in the configuration")
-        asset_value = output_data.get("asset_directory")
+            raise ValueError("markdown.directory must be provided in the configuration")
+        asset_value = markdown_data.get("asset_directory")
         asset_dir = cls._coerce_path(
             asset_value, allow_relative=allow_relative
         )
+        markdown_prompt = cls._coerce_path(markdown_data.get("prompt_path"))
 
         git_cfg = None
-        if "git" in output_data and output_data["git"] is not None:
-            git_data = output_data["git"]
+        if "git" in markdown_data and markdown_data["git"] is not None:
+            git_data = markdown_data["git"]
             repository_path = cls._coerce_path(git_data.get("repository_path"))
             if repository_path is None:
-                raise ValueError("output.git.repository_path is required when configuring git output")
+                raise ValueError("markdown.git.repository_path is required when configuring git output")
             git_cfg = GitOutputConfig(
                 repository_path=repository_path,
                 branch=git_data.get("branch", "main"),
@@ -157,18 +198,18 @@ class AppConfig:
 
         obsidian_cfg = None
         if output_provider == "obsidian":
-            obsidian_data = output_data.get("obsidian", {})
+            obsidian_data = markdown_data.get("obsidian", {})
             repository_path = cls._coerce_path(
                 obsidian_data.get("repository_path")
             )
             if repository_path is None:
                 raise ValueError(
-                    "output.obsidian.repository_path is required when configuring Obsidian output"
+                    "markdown.obsidian.repository_path is required when configuring Obsidian output"
                 )
             repository_url = obsidian_data.get("repository_url")
             if not repository_url:
                 raise ValueError(
-                    "output.obsidian.repository_url is required when configuring Obsidian output"
+                    "markdown.obsidian.repository_url is required when configuring Obsidian output"
                 )
             private_key_path = cls._coerce_path(
                 obsidian_data.get("private_key_path")
@@ -181,12 +222,12 @@ class AppConfig:
                 media_mode = "jpg"
             if media_mode not in {"pdf", "png", "jpg"}:
                 raise ValueError(
-                    "output.obsidian.media_mode must be one of 'pdf', 'png', or 'jpg'"
+                    "markdown.obsidian.media_mode must be one of 'pdf', 'png', or 'jpg'"
                 )
             media_invert = bool(obsidian_data.get("media_invert", False))
             if media_invert and media_mode not in {"png", "jpg"}:
                 raise ValueError(
-                    "output.obsidian.media_invert is only supported when media_mode is 'png' or 'jpg'"
+                    "markdown.obsidian.media_invert is only supported when media_mode is 'png' or 'jpg'"
                 )
             obsidian_cfg = ObsidianOutputConfig(
                 repository_path=repository_path,
@@ -204,15 +245,29 @@ class AppConfig:
                 media_invert=media_invert,
             )
 
+        google_drive_output_cfg = None
+        if output_provider == "google_drive":
+            gd_output_data = markdown_data.get("google_drive", {})
+            folder_id = gd_output_data.get("folder_id")
+            if folder_id:
+                google_drive_output_cfg = GoogleDriveOutputConfig(
+                    folder_id=str(folder_id),
+                    keep_local_copy=bool(gd_output_data.get("keep_local_copy", False)),
+                )
+            else:
+                google_drive_output_cfg = None
+
         if asset_dir is None and output_provider == "obsidian":
             asset_dir = Path("media")
 
-        output = OutputConfig(
+        markdown = MarkdownOutputConfig(
             directory=output_dir,
             asset_directory=asset_dir,
             provider=output_provider,
+            prompt_path=markdown_prompt,
             git=git_cfg,
             obsidian=obsidian_cfg,
+            google_drive=google_drive_output_cfg,
         )
 
         state_path = cls._coerce_path(data["state"]["path"])
@@ -227,6 +282,35 @@ class AppConfig:
             prompt_path=cls._coerce_path(llm_data.get("prompt_path")),
             temperature=float(llm_data.get("temperature", 0.0)),
         )
+
+        mindmap_cfg = None
+        if "mindmap" in data:
+            mindmap_data = data["mindmap"] or {}
+            mm_prompt = cls._coerce_path(mindmap_data.get("prompt_path"))
+            keep_local_copy = bool(mindmap_data.get("keep_local_copy", False))
+
+            gd_output_cfg = None
+            if "google_drive" in mindmap_data:
+                gd_output_data = mindmap_data["google_drive"] or {}
+                folder_id = gd_output_data.get("folder_id")
+                if folder_id:
+                    gd_output_cfg = MindmapGoogleDriveOutputConfig(
+                        folder_id=str(folder_id),
+                    )
+
+            mindmap_cfg = MindmapConfig(
+                prompt_path=mm_prompt,
+                google_drive=gd_output_cfg,
+                keep_local_copy=keep_local_copy,
+            )
+
+        agentic_cfg = None
+        if "agentic" in data:
+            agentic_data = data["agentic"] or {}
+            ag_prompt = cls._coerce_path(agentic_data.get("prompt_path"))
+            hashtags = agentic_data.get("hashtags", ["mm", "mindmap"])
+            hashtags_tuple = tuple(str(tag).lstrip("#").lower() for tag in hashtags)
+            agentic_cfg = AgenticConfig(prompt_path=ag_prompt, hashtags=hashtags_tuple)
 
         google_drive_cfg = None
         if "google_drive" in data:
@@ -268,11 +352,14 @@ class AppConfig:
         return cls(
             provider=provider,
             poll_interval=poll_interval,
-            output=output,
+            pipeline=pipeline,  # type: ignore[arg-type]
+            markdown=markdown,
             state=state,
             llm=llm,
             google_drive=google_drive_cfg,
             local=local_cfg,
+            mindmap=mindmap_cfg,
+            agentic=agentic_cfg,
         )
 
 
@@ -296,7 +383,11 @@ __all__ = [
     "LocalFolderConfig",
     "GitOutputConfig",
     "ObsidianOutputConfig",
-    "OutputConfig",
+    "GoogleDriveOutputConfig",
+    "MarkdownOutputConfig",
     "StateConfig",
+    "MindmapConfig",
+    "MindmapGoogleDriveOutputConfig",
+    "AgenticConfig",
     "load_config",
 ]

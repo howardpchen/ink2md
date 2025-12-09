@@ -1,33 +1,39 @@
 {
   "provider": "google_drive",
+  "pipeline": "agentic",
   "poll_interval": 300,
-  "output": {
-    "provider": "obsidian",
-    "directory": "/opt/ink2md/default-vault/inbox",
-    "asset_directory": "/opt/ink2md/default-vault/media",
-    "obsidian": {
-      "repository_path": "/opt/ink2md/default-vault",
-      "repository_url": "git@github.com:your-org/obsidian-vault.git",
-      "branch": "main",
-      "remote": "origin",
-      "private_key_path": "/etc/ink2md/ssh/id_ed25519",
-      "known_hosts_path": "/etc/ink2md/ssh/known_hosts",
-      "media_mode": "pdf",
-      "media_invert": false,
-      "push": true
-    }
-  },
-  "state": {
-    "path": "./state/processed.json"
-  },
-  "llm": {
-    "provider": "simple"
-  },
   "google_drive": {
     "folder_id": "YOUR_FOLDER_ID_HERE",
     "oauth_client_secrets_file": "./credentials/client_secret.json",
     "scopes": [
       "https://www.googleapis.com/auth/drive.readonly"
     ]
+  },
+  "state": {
+    "path": "./state/processed.json"
+  },
+  "llm": {
+    "provider": "simple",
+    "prompt_path": "./prompts/orchestration.txt"
+  },
+  "markdown": {
+    "provider": "google_drive",
+    "directory": "./output",
+    "prompt_path": "./prompts/markdown.txt",
+    "google_drive": {
+      "folder_id": "YOUR_MARKDOWN_OUTPUT_FOLDER_ID",
+      "keep_local_copy": true
+    }
+  },
+  "mindmap": {
+    "prompt_path": "./prompts/mindmap.txt",
+    "keep_local_copy": true,
+    "google_drive": {
+      "folder_id": "YOUR_MINDMAP_OUTPUT_FOLDER_ID"
+    }
+  },
+  "agentic": {
+    "prompt_path": "./prompts/orchestration.txt",
+    "hashtags": ["mm", "mindmap"]
   }
 }

@@ -30,6 +30,7 @@ def test_configure_logging_creates_daily_log(tmp_path) -> None:
 
 def test_daily_logs_prune_after_seven_days(tmp_path) -> None:
     log_dir = tmp_path / "log"
+    log_dir.mkdir(parents=True, exist_ok=True)
     today = date.today()
     for days_ago in range(10, 0, -1):
         old_day = today - timedelta(days=days_ago)
@@ -43,4 +44,3 @@ def test_daily_logs_prune_after_seven_days(tmp_path) -> None:
     assert existing[-1] == f"{today.isoformat()}.log"
 
     _shutdown_logging()
-
