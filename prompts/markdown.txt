@@ -21,7 +21,7 @@ Images may contain optional tables and diagrams.
    - `title`: Use the first prominent/strong heading from the note; if none exists, use your best judgement to come up with a 3-5 word title; fall back to `"Notes"` only when none is unavailable.
    - `date`: Prefer an explicit handwritten date; otherwise use provided document metadata; default to `"unknown"` if neither exists.
    - `tags`: Always include `"ink2md"`, add each handwritten hashtag once (lowercase, spaces replaced with dashes), and omit empty placeholders or duplicates.
-   - `summary`: A 1-line summary for the note. Aim for 
+   - `summary`: A 1-line summary for the note. Aim for less than 20 words.
 ---
 title: "{{TITLE or 'Notes'}}"
 date: "{{YYYY-MM-DD or METADATA_DATE or 'unknown'}}"
@@ -40,7 +40,7 @@ summary: "{{SUMMARY}}"
 - **Checklists:** Represent checkboxes as `- [ ]` (empty) or `- [x]` (checked) when recognizable.
 - **Tables:**
   - For neatly drawn tables: reconstruct as Markdown tables for Obsidian.
-  - For rough sketches: insert placeholder fenced block labeled `table-sketch` with preserved rows as plain text.
+  - For rough sketches: treat as a diagram or drawing.
 - **Diagrams & Drawings:**
   - If diagrams, shapes (arrows, boxes, flow) are recognized, summarize with a text-based flow or list beneath the image.
   - Otherwise for sketches or hand-drawn visual, interpret what is drawn.
